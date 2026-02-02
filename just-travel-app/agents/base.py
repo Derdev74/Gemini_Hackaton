@@ -83,6 +83,6 @@ class BaseAgent:
         """
         context_str = ""
         if context:
-            context_str = f"\\nCONTEXT:\\n{context}\\n"
+            context_str = f"\nCONTEXT:\n{context}\n"
             
         return f"{base_prompt}{context_str}"

@@ -50,8 +50,8 @@ class ConciergeAgent(BaseAgent):
             "tool_call": "search_hotels", 
             "arguments": {{
                 "location": "Paris",
-                "checkin_date": "2024-05-01",
-                "checkout_date": "2024-05-05",
+                "checkin_date": "YYYY-MM-DD",
+                "checkout_date": "YYYY-MM-DD",
                 "budget_max": 200
             }}
         }}

@@ -75,31 +75,94 @@ class SocialTools:
     def search_travel_content(self, location: str) -> list:
         return self.search_platform("tiktok", [f"{location} travel guide"], limit=5)
 
+import requests
+
+# ... (imports remain)
+
     def search_platform(self, platform: str, queries: list, limit: int = 10) -> list:
         if not self._initialized:
             return self._get_mock_search_results(platform, queries, limit)
         
-        # Real Apify implementation logic (omitted for brevity in this specific file version)
-        return []
+        try:
+            logger.info(f"Searching {platform} via Apify for: {queries}")
+            actor_id = self.ACTOR_IDS.get(platform)
+            if not actor_id:
+                logger.warning(f"No actor configured for {platform}, using mock.")
+                return self._get_mock_search_results(platform, queries, limit)
+
+            # Prepare generic input (works for most social scrapers like instagram-scraper)
+            # Note: Specific actors might need specific keys (e.g. "search" vs "searchQueries")
+            run_input = {
+                "search": queries[0], # Simple single query support for stability
+                "searchQueries": queries, 
+                "resultsLimit": limit,
+                "resultsType": "posts"
+            }
+
+            # Run the actor
+            run = self.client.actor(actor_id).call(run_input=run_input)
+            
+            if not run:
+                logger.warning("Apify run failed to start.")
+                return []
+
+            # Fetch results
+            dataset = self.client.dataset(run["defaultDatasetId"])
+            items = list(dataset.iterate_items())
+            
+            # Normalize results to a common format
+            normalized = []
+            for item in items:
+                normalized.append({
+                    "title": item.get("caption") or item.get("text") or "No Caption",
+                    "url": item.get("url") or item.get("postUrl"),
+                    "thumbnail": item.get("displayUrl") or item.get("thumbnailUrl"),
+                    "likes": item.get("likesCount", 0)
+                })
+                
+            return normalized
+
+        except Exception as e:
+            logger.error(f"Apify search failed: {e}")
+            return self._get_mock_search_results(platform, queries, limit)
 
     async def analyze_visual_vibe(self, content_url: str) -> Dict:
         """
         Analyze the 'vibe' of a piece of visual content using Gemini Vision.
+        Downloads the image bytes and calls the model.
         """
+        if not content_url:
+            return {"vibe_description": "No URL provided"}
+
         try:
-            # Using LLM to simulate the *description* of the vibe based on metadata/url context
-            prompt = "Analyze the aesthetic of a travel video/image. Is it luxury, adventure, chill, or party? Give a score out of 100."
+            # 1. Download the image bytes
+            logger.info(f"Downloading content for analysis: {content_url}")
+            response = requests.get(content_url, timeout=10)
+            response.raise_for_status()
+            image_choices = response.content
             
-            # Note: In production we would pass the image bytes here
-            response = await self.vision_model.generate_content_async([prompt, "Image/Video URL: " + content_url])
+            # 2. Call Gemini Vision
+            prompt = "Analyze the aesthetic of this travel image. Is it luxury, adventure, chill, or party? Give a score out of 100 for 'Instagrammability'."
+            
+            # Pass dictionary with explicit mime_type for Gemini
+            # Assuming JPEG for simplicity, but could sniff header
+            content_part = {
+                "mime_type": "image/jpeg", 
+                "data": image_choices
+            }
+            
+            model_response = await self.vision_model.generate_content_async([prompt, content_part])
             
             return {
-                "vibe_description": response.text,
+                "vibe_description": model_response.text,
                 "analyzed_url": content_url
             }
         except Exception as e:
             logger.error(f"Visual Vibe Check failed: {e}")
-            return {"vibe_description": "Unable to analyze visual vibe.", "error": str(e)}
+            return {
+                "vibe_description": f"Visual analysis failed ({str(e)}). Assumed vibe based on metadata.", 
+                "error": str(e)
+            }
 
     # --- Mocks ---
     def _get_mock_search_results(self, platform, queries, limit):

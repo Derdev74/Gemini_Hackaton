@@ -107,7 +107,8 @@ class OptimizerAgent(BaseAgent):
             # Take top 10 to fit in context window
             names = [str(item.get(key, "Unknown")) for item in items[:10]]
             return ", ".join(names)
-        except:
+        except Exception as e:
+            logger.warning(f"Failed to summarize list for key {key}: {e}")
             return "Data available"
 
     def _patch_dates(self, plan: dict, start_date_str: str):
@@ -117,5 +118,5 @@ class OptimizerAgent(BaseAgent):
             for day in plan.get("daily_itinerary", []):
                 day["date"] = current.strftime("%Y-%m-%d")
                 current += timedelta(days=1)
-        except:
+        except Exception:
             pass

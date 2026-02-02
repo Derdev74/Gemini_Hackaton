@@ -13,6 +13,8 @@ Tools:
 from .cypher_tools import CypherTools
 from .social_tools import SocialTools
 from .maps_tools import MapsTools
+from .booking_tools import BookingTools
+from .transport_tools import TransportTools
 
 __all__ = [
     "CypherTools",

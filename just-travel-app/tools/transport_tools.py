@@ -108,7 +108,7 @@ class TransportTools:
             return results
 
         except Exception as e:
-            logger.error(f"Flight search failed: {e}")
+            logger.error(f"Flight search failed at API level: {e}")
             return self._get_mock_flights(origin, destination, departure_date)
 
     def _get_mock_flights(self, origin, dest, date) -> List[Dict]:

@@ -239,9 +239,15 @@ class CypherTools:
             list: Connected destinations
         """
         connection_types = connection_types or ["NEAR", "SIMILAR_TO", "RECOMMENDED_WITH"]
+        
+        # Validation to prevent Cypher injection
+        allowed_types = {"NEAR", "SIMILAR_TO", "RECOMMENDED_WITH", "IN_REGION", "NEXT_TO"}
+        valid_types = [t for t in connection_types if t in allowed_types]
+        if not valid_types:
+            valid_types = ["NEAR"]
 
         # Build relationship type clause
-        rel_types = "|".join(connection_types)
+        rel_types = "|".join(valid_types)
 
         query = f"""
         MATCH (origin:Destination)-[r:{rel_types}]-(connected:Destination)

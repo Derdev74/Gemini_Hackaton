@@ -116,5 +116,12 @@ class ProfilerAgent(BaseAgent):
         """Update the dataclass with new dictionary data."""
         for key, value in new_data.items():
             if hasattr(self.current_profile, key):
-                # Simple overwrite for scalars, union for lists could be better but LLM handles merging
-                setattr(self.current_profile, key, value)
+                current_attr = getattr(self.current_profile, key)
+                # If both are lists, extend to avoid losing previous data (e.g. existing allergies)
+                if isinstance(current_attr, list) and isinstance(value, list):
+                    # Use set to avoid duplicates while merging
+                    merged = list(set(current_attr + value))
+                    setattr(self.current_profile, key, merged)
+                else:
+                    # Simple overwrite for scalars
+                    setattr(self.current_profile, key, value)
