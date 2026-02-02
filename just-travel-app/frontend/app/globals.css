@@ -1,0 +1,257 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Just Travel App - Neo-Brutalist Global Styles
+ * =============================================
+ *
+ * This stylesheet defines the neo-brutalist design system:
+ * - Bold, hard shadows (no blur)
+ * - Thick black borders
+ * - Vibrant, saturated colors
+ * - Monospace typography for headers
+ * - Raw, unpolished aesthetic
+ */
+
+/* Import Google Fonts for brutalist typography */
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Space+Mono:wght@400;700&display=swap');
+
+/* Base layer - fundamental styles */
+@layer base {
+  :root {
+    /* Neo-brutalist color tokens */
+    --color-brutal-black: #000000;
+    --color-brutal-white: #FFFFFF;
+    --color-brutal-yellow: #FFE135;
+    --color-brutal-pink: #FF6B9D;
+    --color-brutal-blue: #00D4FF;
+    --color-brutal-green: #00FF85;
+    --color-brutal-purple: #B967FF;
+    --color-brutal-orange: #FF9F43;
+    --color-brutal-red: #FF4757;
+    --color-background: #F5F5DC;
+
+    /* Shadow tokens */
+    --shadow-brutal: 4px 4px 0px 0px var(--color-brutal-black);
+    --shadow-brutal-lg: 8px 8px 0px 0px var(--color-brutal-black);
+    --shadow-brutal-hover: 2px 2px 0px 0px var(--color-brutal-black);
+  }
+
+  /* Global body styles */
+  body {
+    @apply bg-background text-brutal-black font-sans;
+    background-image:
+      radial-gradient(circle at 25px 25px, rgba(0, 0, 0, 0.05) 2px, transparent 0);
+    background-size: 50px 50px;
+  }
+
+  /* Heading styles - monospace for brutalist feel */
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-mono font-bold tracking-tight;
+  }
+
+  h1 {
+    @apply text-4xl md:text-6xl;
+  }
+
+  h2 {
+    @apply text-3xl md:text-4xl;
+  }
+
+  h3 {
+    @apply text-2xl md:text-3xl;
+  }
+
+  /* Link styles */
+  a {
+    @apply underline decoration-4 underline-offset-4 hover:decoration-brutal-yellow transition-colors;
+  }
+
+  /* Selection highlight */
+  ::selection {
+    @apply bg-brutal-yellow text-brutal-black;
+  }
+}
+
+/* Component layer - reusable component styles */
+@layer components {
+  /* Brutalist button base */
+  .btn-brutal {
+    @apply px-6 py-3 font-mono font-bold uppercase tracking-wide
+           border-4 border-brutal-black bg-brutal-white
+           shadow-brutal transition-all duration-150
+           hover:shadow-brutal-hover hover:translate-x-[2px] hover:translate-y-[2px]
+           active:shadow-none active:translate-x-[4px] active:translate-y-[4px];
+  }
+
+  /* Button color variants */
+  .btn-brutal-yellow {
+    @apply btn-brutal bg-brutal-yellow;
+  }
+
+  .btn-brutal-pink {
+    @apply btn-brutal bg-brutal-pink;
+  }
+
+  .btn-brutal-blue {
+    @apply btn-brutal bg-brutal-blue;
+  }
+
+  .btn-brutal-green {
+    @apply btn-brutal bg-brutal-green;
+  }
+
+  /* Brutalist card */
+  .card-brutal {
+    @apply p-6 border-4 border-brutal-black bg-brutal-white shadow-brutal;
+  }
+
+  /* Brutalist input */
+  .input-brutal {
+    @apply w-full px-4 py-3 font-mono
+           border-4 border-brutal-black bg-brutal-white
+           focus:outline-none focus:ring-0 focus:shadow-brutal
+           placeholder:text-gray-500;
+  }
+
+  /* Brutalist badge */
+  .badge-brutal {
+    @apply inline-block px-3 py-1 font-mono text-sm font-bold uppercase
+           border-2 border-brutal-black;
+  }
+
+  /* Loading spinner - brutalist style */
+  .spinner-brutal {
+    @apply w-8 h-8 border-4 border-brutal-black border-t-brutal-yellow
+           animate-spin;
+  }
+
+  /* Chat message bubble */
+  .chat-bubble {
+    @apply p-4 border-3 border-brutal-black max-w-[80%];
+  }
+
+  .chat-bubble-user {
+    @apply chat-bubble bg-brutal-yellow ml-auto;
+  }
+
+  .chat-bubble-assistant {
+    @apply chat-bubble bg-brutal-white mr-auto;
+  }
+
+  /* Section container */
+  .section-brutal {
+    @apply p-8 border-4 border-brutal-black bg-brutal-white shadow-brutal-lg;
+  }
+
+  /* Grid for itinerary cards */
+  .itinerary-grid {
+    @apply grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6;
+  }
+
+  /* Day card in itinerary */
+  .day-card {
+    @apply card-brutal hover:shadow-brutal-lg transition-shadow;
+  }
+
+  /* Time slot item */
+  .time-slot {
+    @apply flex gap-4 p-3 border-b-2 border-brutal-black last:border-b-0;
+  }
+
+  /* Status indicator */
+  .status-dot {
+    @apply w-3 h-3 border-2 border-brutal-black;
+  }
+
+  .status-dot-success {
+    @apply status-dot bg-brutal-green;
+  }
+
+  .status-dot-pending {
+    @apply status-dot bg-brutal-yellow;
+  }
+
+  .status-dot-error {
+    @apply status-dot bg-brutal-red;
+  }
+}
+
+/* Utility layer - custom utilities */
+@layer utilities {
+  /* Text stroke for headlines */
+  .text-stroke {
+    -webkit-text-stroke: 2px var(--color-brutal-black);
+    text-stroke: 2px var(--color-brutal-black);
+  }
+
+  /* Rotate utility for playful elements */
+  .rotate-brutal {
+    transform: rotate(-2deg);
+  }
+
+  .rotate-brutal-reverse {
+    transform: rotate(2deg);
+  }
+
+  /* Pattern backgrounds */
+  .pattern-dots {
+    background-image: radial-gradient(circle, var(--color-brutal-black) 1px, transparent 1px);
+    background-size: 20px 20px;
+  }
+
+  .pattern-lines {
+    background-image: repeating-linear-gradient(
+      45deg,
+      transparent,
+      transparent 10px,
+      rgba(0, 0, 0, 0.1) 10px,
+      rgba(0, 0, 0, 0.1) 20px
+    );
+  }
+
+  /* Smooth scrolling */
+  .scroll-smooth {
+    scroll-behavior: smooth;
+  }
+
+  /* Hide scrollbar but allow scrolling */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* Animation keyframes */
+@keyframes slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulse-brutal {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.02);
+  }
+}
+
+.animate-slide-up {
+  animation: slide-up 0.3s ease-out;
+}
+
+.animate-pulse-brutal {
+  animation: pulse-brutal 2s ease-in-out infinite;
+}
