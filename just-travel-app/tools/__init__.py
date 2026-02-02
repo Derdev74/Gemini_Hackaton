@@ -19,5 +19,7 @@ from .transport_tools import TransportTools
 __all__ = [
     "CypherTools",
     "SocialTools",
-    "MapsTools"
+    "MapsTools",
+    "BookingTools",
+    "TransportTools"
 ]

@@ -43,9 +43,9 @@ class BaseAgent:
         # Mapping "Gemini 3" request to best available current models
         # Adjust these strings if specific "gemini-3.0" endpoints become available
         if model_type == "pro":
-            model_name = os.getenv("GEMINI_PRO_MODEL", "gemini-1.5-pro")
+            model_name = os.getenv("GEMINI_PRO_MODEL", "gemini-3.0-pro")
         else:
-            model_name = os.getenv("GEMINI_FLASH_MODEL", "gemini-2.0-flash-exp")
+            model_name = os.getenv("GEMINI_FLASH_MODEL", "gemini-3.0-flash")
             
         self.model = genai.GenerativeModel(model_name)
         

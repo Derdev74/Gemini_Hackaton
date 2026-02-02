@@ -11,6 +11,7 @@ import logging
 from typing import Optional, Dict
 from datetime import datetime
 import google.generativeai as genai
+import requests
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +51,7 @@ class SocialTools:
         if api_key:
              genai.configure(api_key=api_key)
              # Use a Pro model for Vision
-             self.vision_model = genai.GenerativeModel("gemini-1.5-pro")
+             self.vision_model = genai.GenerativeModel("gemini-3.0-pro")
 
         logger.info(f"SocialTools initialized (connected: {self._initialized})")
 
@@ -75,9 +76,6 @@ class SocialTools:
     def search_travel_content(self, location: str) -> list:
         return self.search_platform("tiktok", [f"{location} travel guide"], limit=5)
 
-import requests
-
-# ... (imports remain)
 
     def search_platform(self, platform: str, queries: list, limit: int = 10) -> list:
         if not self._initialized:
