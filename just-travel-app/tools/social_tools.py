@@ -8,9 +8,11 @@ and Gemini Vision for visual trend analysis.
 
 import os
 import logging
+import asyncio
 from typing import Optional, Dict
 from datetime import datetime
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 import requests
 
 logger = logging.getLogger(__name__)
@@ -48,10 +50,11 @@ class SocialTools:
         # Initialize Vision Model specifically for Tools usage
         # We reuse the key from env
         api_key = os.getenv("GOOGLE_API_KEY")
+        self.genai_client = None
         if api_key:
-             genai.configure(api_key=api_key)
+             self.genai_client = genai.Client(api_key=api_key)
              # Use a Pro model for Vision
-             self.vision_model = genai.GenerativeModel("gemini-3.0-pro")
+             self.vision_model_name = "gemini-3-pro-preview"
 
         logger.info(f"SocialTools initialized (connected: {self._initialized})")
 
@@ -133,23 +136,27 @@ class SocialTools:
             return {"vibe_description": "No URL provided"}
 
         try:
+            if not self.genai_client:
+                 return {"vibe_description": "Vision AI not configured"}
+
             # 1. Download the image bytes
             logger.info(f"Downloading content for analysis: {content_url}")
             response = requests.get(content_url, timeout=10)
             response.raise_for_status()
-            image_choices = response.content
+            image_bytes = response.content
             
             # 2. Call Gemini Vision
             prompt = "Analyze the aesthetic of this travel image. Is it luxury, adventure, chill, or party? Give a score out of 100 for 'Instagrammability'."
             
-            # Pass dictionary with explicit mime_type for Gemini
-            # Assuming JPEG for simplicity, but could sniff header
-            content_part = {
-                "mime_type": "image/jpeg", 
-                "data": image_choices
-            }
-            
-            model_response = await self.vision_model.generate_content_async([prompt, content_part])
+            # Run the synchronous SDK call in a thread to avoid blocking the event loop
+            model_response = await asyncio.to_thread(
+                self.genai_client.models.generate_content,
+                model=self.vision_model_name,
+                contents=[
+                    types.Part.from_text(text=prompt),
+                    types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg")
+                ]
+            )
             
             return {
                 "vibe_description": model_response.text,

@@ -109,7 +109,7 @@ Just type your preferences and I'll create a personalized travel plan for you!`,
     setIsLoading(true)
 
     try {
-      const res = await fetch('http://localhost:8000/api/chat', {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -143,7 +143,7 @@ Just type your preferences and I'll create a personalized travel plan for you!`,
       const errorMessage: Message = {
         id: `error-${Date.now()}`,
         role: 'assistant',
-        content: 'Sorry, I encountered an error connecting to the agent. Make sure the backend endpoint is running at http://localhost:8000.',
+        content: `Sorry, I encountered an error connecting to the agent. Make sure the backend endpoint is running at ${process.env.NEXT_PUBLIC_API_URL}.`,
         timestamp: new Date(),
         agentSource: 'system'
       }

@@ -7,10 +7,11 @@ from datetime import datetime, timedelta
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# Mock google.generativeai BEFORE importing tools
+# Mock google.genai BEFORE importing tools
 from unittest.mock import MagicMock
 sys.modules["google"] = MagicMock()
-sys.modules["google.generativeai"] = MagicMock()
+sys.modules["google.genai"] = MagicMock()
+sys.modules["google.genai.types"] = MagicMock()
 
 from tools.booking_tools import BookingTools
 

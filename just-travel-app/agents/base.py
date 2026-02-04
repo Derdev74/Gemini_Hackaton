@@ -14,7 +14,8 @@ It supports:
 
 import os
 import logging
-import google.generativeai as genai
+import asyncio
+from google import genai
 from typing import Optional, Dict, Any, List
 
 logger = logging.getLogger(__name__)
@@ -25,7 +26,8 @@ class BaseAgent:
     
     Attributes:
         name: The name of the agent (e.g., "profiler", "concierge")
-        model: The initialized Gemini GenerativeModel
+        client: The initialized Gemini Client
+        model_name: The name of the model to use
     """
     
     def __init__(self, name: str, description: str, model_type: str = "flash"):
@@ -36,20 +38,17 @@ class BaseAgent:
         api_key = os.getenv("GOOGLE_API_KEY")
         if not api_key:
             logger.warning("GOOGLE_API_KEY not found in environment variables.")
+            self.client = None
         else:
-            genai.configure(api_key=api_key)
+            self.client = genai.Client(api_key=api_key)
             
         # Select Model based on type
-        # Mapping "Gemini 3" request to best available current models
-        # Adjust these strings if specific "gemini-3.0" endpoints become available
         if model_type == "pro":
-            model_name = os.getenv("GEMINI_PRO_MODEL", "gemini-3.0-pro")
+            self.model_name = "gemini-3-pro-preview"
         else:
-            model_name = os.getenv("GEMINI_FLASH_MODEL", "gemini-3.0-flash")
+            self.model_name = "gemini-3-flash-preview"
             
-        self.model = genai.GenerativeModel(model_name)
-        
-        logger.info(f"Agent '{self.name}' initialized with model '{model_name}' ({model_type})")
+        logger.info(f"Agent '{self.name}' initialized with model '{self.model_name}' ({model_type})")
 
     async def generate_response(self, prompt: str, context: Optional[Dict] = None) -> str:
         """
@@ -63,12 +62,18 @@ class BaseAgent:
             str: The raw text response from the model
         """
         try:
+            if not self.client:
+                return "Error: Client not initialized (Missing API Key)"
+
             # Construct the full prompt context
             full_prompt = self._construct_prompt(prompt, context)
             
-            # Generate content
-            # Assuming 'thought_signature' is enabled via prompt or config if available
-            response = await self.model.generate_content_async(full_prompt)
+            # Run the synchronous SDK call in a thread to avoid blocking the event loop
+            response = await asyncio.to_thread(
+                self.client.models.generate_content,
+                model=self.model_name,
+                contents=full_prompt
+            )
             
             return response.text
             
