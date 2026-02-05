@@ -16,7 +16,10 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
+import { useSession, signIn, signOut } from "next-auth/react"
 import { ItineraryView } from '../components/ItineraryView'
+import PreferencePanel, { Preferences } from '../components/PreferencePanel'
+import LoadingExperience from '../components/LoadingExperience'
 
 /**
  * Message type definition for chat messages
@@ -49,10 +52,9 @@ interface TravelPreferences {
 interface AgentResponse {
   agent: string
   status: string
-  results?: unknown
-  profile?: unknown
-  itinerary?: unknown
   message?: string
+  profile?: unknown
+  data?: { itinerary?: any }
   creative?: { poster_url?: string; video_url?: string }
 }
 
@@ -60,6 +62,14 @@ interface AgentResponse {
  * Main page component - Orchestrator Bridge
  */
 export default function HomePage() {
+  const { data: session } = useSession()
+  const [authModalOpen, setAuthModalOpen] = useState(false)
+  const [isLoginMode, setIsLoginMode] = useState(true)
+  const [authEmail, setAuthEmail] = useState('')
+  const [authPassword, setAuthPassword] = useState('')
+  const [authName, setAuthName] = useState('')
+  const [authError, setAuthError] = useState('')
+
   // State management
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -83,6 +93,127 @@ Just type your preferences and I'll create a personalized travel plan for you!`,
   const [isLoading, setIsLoading] = useState(false)
   const [preferences, setPreferences] = useState<TravelPreferences>({})
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [savedIds, setSavedIds] = useState<Set<string>>(new Set())
+  const [pendingSave, setPendingSave] = useState<Message | null>(null)
+  const [panelPrefs, setPanelPrefs] = useState<Preferences>({
+    dietary: [], budget: 200, tripType: '', companionType: '', startDate: '', endDate: ''
+  })
+
+  // Sync Google Session with Backend
+  useEffect(() => {
+    // @ts-ignore
+    if (session?.id_token) {
+      // Exchange token
+      fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/auth/google`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include', // Fix: Ensure cookies are set
+        // @ts-ignore
+        body: JSON.stringify({ id_token: session.id_token })
+      }).then(async res => {
+        if (res.ok) {
+          const data = await res.json()
+          console.log("Synced with Backend via Google")
+          setCurrentUser(data.user) // Update local state for UI feedback
+          setAuthModalOpen(false)
+          // Force a refresh of next-auth session if needed, but we rely on cookies mostly now
+        } else {
+          const errData = await res.json().catch(() => ({}))
+          console.error("Google Sync Failed:", res.status, errData)
+        }
+      }).catch(err => {
+        console.error("Google Sync Fetch Error:", err)
+      })
+    }
+  }, [session])
+
+  // UI State for Local User
+  const [currentUser, setCurrentUser] = useState<{ email: string, full_name?: string } | null>(null)
+
+  // Check valid session on mount
+  useEffect(() => {
+    fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/auth/me`, {
+      credentials: 'include'
+    }).then(async res => {
+      if (res.ok) {
+        const user = await res.json()
+        setCurrentUser(user)
+      }
+    }).catch(() => { })
+  }, [])
+
+  const handleAuth = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setAuthError('')
+
+    const endpoint = isLoginMode ? '/api/auth/login' : '/api/auth/register'
+    const body = isLoginMode
+      ? { email: authEmail, password: authPassword }
+      : { email: authEmail, password: authPassword, full_name: authName }
+
+    try {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}${endpoint}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include', // Fix: Ensure cookies are set
+        body: JSON.stringify(body)
+      })
+
+      if (res.ok) {
+        const data = await res.json()
+        const loggedInUser = data.user || { email: authEmail, full_name: authName }
+        setCurrentUser(loggedInUser)
+        setAuthModalOpen(false)
+        setAuthEmail('')
+        setAuthPassword('')
+        // If user was trying to save a plan before logging in, do it now
+        if (pendingSave) {
+          const msg = pendingSave
+          setPendingSave(null)
+          setTimeout(() => savePlan(msg), 100)
+        }
+      } else {
+        const data = await res.json()
+        setAuthError(data.detail || 'Authentication failed')
+      }
+    } catch (err) {
+      setAuthError('Connection error')
+    }
+  }
+
+  const savePlan = async (message: Message) => {
+    if (!currentUser) {
+      setPendingSave(message)
+      setAuthModalOpen(true)
+      return
+    }
+    const itinerary = message.itineraryData
+    try {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/itinerary/save`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          destination: itinerary?.destination || 'Unknown',
+          summary: itinerary?.summary || '',
+          itinerary_data: itinerary || {},
+          creative_assets: message.creativeData || {}
+        })
+      })
+      if (res.ok) {
+        setSavedIds(prev => new Set(prev).add(message.id))
+        setMessages(prev => [...prev, {
+          id: `sys-${Date.now()}`,
+          role: 'assistant',
+          content: 'Your itinerary has been saved to your account!',
+          timestamp: new Date(),
+          agentSource: 'system'
+        }])
+      }
+    } catch (e) {
+      console.error('Save failed', e)
+    }
+  }
 
   // Refs
   const chatContainerRef = useRef<HTMLDivElement>(null)
@@ -139,13 +270,24 @@ Just type your preferences and I'll create a personalized travel plan for you!`,
     setSelectedFile(null)
     setIsLoading(true)
 
+
     try {
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include', // Important for Cookies
         body: JSON.stringify({
           message: inputValue,
-          preferences: preferences,
+          preferences: {
+            ...preferences,
+            dietary: panelPrefs.dietary,
+            budget_per_day_usd: panelPrefs.budget,
+            trip_type: panelPrefs.tripType,
+            companion_type: panelPrefs.companionType || undefined,
+            travel_dates: panelPrefs.startDate && panelPrefs.endDate
+              ? { start: panelPrefs.startDate, end: panelPrefs.endDate }
+              : undefined,
+          },
           uploaded_file: uploadedUrl || undefined
         })
       })
@@ -160,7 +302,7 @@ Just type your preferences and I'll create a personalized travel plan for you!`,
         content: response.message || 'I received your request.',
         timestamp: new Date(),
         agentSource: response.agent,
-        itineraryData: response.itinerary,
+        itineraryData: response.data?.itinerary,
         creativeData: response.creative
       }
 
@@ -176,7 +318,7 @@ Just type your preferences and I'll create a personalized travel plan for you!`,
       const errorMessage: Message = {
         id: `error-${Date.now()}`,
         role: 'assistant',
-        content: `Sorry, I encountered an error connecting to the agent. Make sure the backend endpoint is running at ${process.env.NEXT_PUBLIC_API_URL}.`,
+        content: "We're having trouble reaching our travel experts right now. Please try again in a moment.",
         timestamp: new Date(),
         agentSource: 'system'
       }
@@ -200,16 +342,16 @@ Just type your preferences and I'll create a personalized travel plan for you!`,
   return (
     <div className="min-h-screen">
       {/* Hero Section */}
-      <section className="bg-brutal-pink border-b-4 border-brutal-black">
+      <section className="relative overflow-hidden border-b border-white/10 bg-gradient-to-br from-[#0f0f23] via-[#1a1035] to-[#0f1a23]">
         <div className="container mx-auto px-4 py-16 md:py-24">
           <div className="max-w-4xl mx-auto text-center">
-            <h1 className="text-5xl md:text-7xl font-mono font-bold mb-6 text-stroke">
+            <h1 className="text-5xl md:text-7xl font-mono font-bold mb-6 text-white text-stroke">
               PLAN YOUR
-              <span className="block bg-brutal-black text-brutal-yellow px-4 py-2 mt-2 inline-block rotate-brutal">
+              <span className="block bg-black/60 backdrop-blur-sm text-brutal-yellow px-4 py-2 mt-2 inline-block rotate-brutal border border-yellow-500/20">
                 PERFECT TRIP
               </span>
             </h1>
-            <p className="text-xl md:text-2xl font-mono mb-8 max-w-2xl mx-auto">
+            <p className="text-xl md:text-2xl font-mono mb-8 max-w-2xl mx-auto text-white/70">
               AI-powered travel planning that respects your dietary needs,
               budget, and travel style.
             </p>
@@ -229,67 +371,67 @@ Just type your preferences and I'll create a personalized travel plan for you!`,
       <section id="features" className="py-16 md:py-24">
         <div className="container mx-auto px-4">
           <h2 className="text-4xl font-mono font-bold text-center mb-12">
-            <span className="bg-brutal-blue px-4 py-2 border-4 border-brutal-black shadow-brutal">
+            <span className="bg-black/60 backdrop-blur-sm px-4 py-2 border border-brutal-blue/40 text-brutal-blue" style={{boxShadow:'0 0 16px rgba(0,212,255,0.2)'}}>
               FEATURES
             </span>
           </h2>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 max-w-6xl mx-auto">
             {/* Feature 1 */}
-            <div className="card-brutal bg-brutal-yellow rotate-brutal hover:rotate-0 transition-transform">
+            <div className="card-brutal border-glow-yellow rotate-brutal hover:rotate-0 transition-transform">
               <div className="text-4xl mb-4">🍽️</div>
-              <h3 className="text-xl font-mono font-bold mb-2">Dietary Aware</h3>
-              <p>
+              <h3 className="text-xl font-mono font-bold mb-2 text-brutal-yellow">Dietary Aware</h3>
+              <p className="text-white/70">
                 Respects your dietary restrictions - vegetarian, vegan, halal,
                 kosher, and allergen-free options.
               </p>
             </div>
 
             {/* Feature 2 */}
-            <div className="card-brutal bg-brutal-green rotate-brutal-reverse hover:rotate-0 transition-transform">
+            <div className="card-brutal border-glow-green rotate-brutal-reverse hover:rotate-0 transition-transform">
               <div className="text-4xl mb-4">📊</div>
-              <h3 className="text-xl font-mono font-bold mb-2">Trend Analysis</h3>
-              <p>
+              <h3 className="text-xl font-mono font-bold mb-2 text-brutal-green">Trend Analysis</h3>
+              <p className="text-white/70">
                 Discovers trending destinations and hidden gems from social
                 media and travel communities.
               </p>
             </div>
 
             {/* Feature 3 */}
-            <div className="card-brutal bg-brutal-purple rotate-brutal hover:rotate-0 transition-transform">
+            <div className="card-brutal border-glow-purple rotate-brutal hover:rotate-0 transition-transform">
               <div className="text-4xl mb-4">🗺️</div>
-              <h3 className="text-xl font-mono font-bold mb-2">Smart Routing</h3>
-              <p>
+              <h3 className="text-xl font-mono font-bold mb-2 text-brutal-purple">Smart Routing</h3>
+              <p className="text-white/70">
                 Optimizes your daily itinerary to minimize travel time and
                 maximize experiences.
               </p>
             </div>
 
             {/* Feature 4 */}
-            <div className="card-brutal bg-brutal-orange rotate-brutal-reverse hover:rotate-0 transition-transform">
+            <div className="card-brutal border-glow-orange rotate-brutal-reverse hover:rotate-0 transition-transform">
               <div className="text-4xl mb-4">🏨</div>
-              <h3 className="text-xl font-mono font-bold mb-2">Curated Stays</h3>
-              <p>
+              <h3 className="text-xl font-mono font-bold mb-2 text-brutal-orange">Curated Stays</h3>
+              <p className="text-white/70">
                 Finds accommodations that match your budget and preferences
                 with verified reviews.
               </p>
             </div>
 
             {/* Feature 5 */}
-            <div className="card-brutal bg-brutal-pink rotate-brutal hover:rotate-0 transition-transform">
+            <div className="card-brutal border-glow-pink rotate-brutal hover:rotate-0 transition-transform">
               <div className="text-4xl mb-4">🤖</div>
-              <h3 className="text-xl font-mono font-bold mb-2">AI Agents</h3>
-              <p>
+              <h3 className="text-xl font-mono font-bold mb-2 text-brutal-pink">AI Agents</h3>
+              <p className="text-white/70">
                 Five specialized AI agents work together to create your
                 perfect travel experience.
               </p>
             </div>
 
             {/* Feature 6 */}
-            <div className="card-brutal bg-brutal-blue rotate-brutal-reverse hover:rotate-0 transition-transform">
+            <div className="card-brutal border-glow-cyan rotate-brutal-reverse hover:rotate-0 transition-transform">
               <div className="text-4xl mb-4">📅</div>
-              <h3 className="text-xl font-mono font-bold mb-2">Dynamic Planning</h3>
-              <p>
+              <h3 className="text-xl font-mono font-bold mb-2 text-brutal-blue">Dynamic Planning</h3>
+              <p className="text-white/70">
                 Generates day-by-day itineraries that adapt to weather,
                 crowds, and your energy levels.
               </p>
@@ -299,30 +441,70 @@ Just type your preferences and I'll create a personalized travel plan for you!`,
       </section>
 
       {/* Chat Section */}
-      <section id="chat" className="py-16 md:py-24 bg-brutal-black">
+      <section id="chat" className="py-16 md:py-24 bg-black/60">
         <div className="container mx-auto px-4">
-          <h2 className="text-4xl font-mono font-bold text-center mb-12 text-brutal-white">
-            <span className="bg-brutal-yellow px-4 py-2 border-4 border-brutal-white shadow-brutal text-brutal-black">
+          <h2 className="text-4xl font-mono font-bold text-center mb-12">
+            <span className="bg-black/60 backdrop-blur-sm px-4 py-2 border border-brutal-yellow/40 text-brutal-yellow" style={{boxShadow:'0 0 16px rgba(255,225,53,0.2)'}}>
               START PLANNING
             </span>
           </h2>
 
           {/* Chat Interface */}
           <div className="max-w-4xl mx-auto">
+            <PreferencePanel value={panelPrefs} onChange={setPanelPrefs} />
+
             <div className="card-brutal p-0 overflow-hidden">
               {/* Chat Header */}
-              <div className="bg-brutal-yellow border-b-4 border-brutal-black p-4 flex items-center gap-3">
-                <div className="w-3 h-3 bg-brutal-green border-2 border-brutal-black rounded-full"></div>
-                <span className="font-mono font-bold">AI Travel Assistant</span>
-                <span className="ml-auto text-sm font-mono opacity-60">
-                  {preferences.destination && `Destination: ${preferences.destination}`}
-                </span>
+              <div className="bg-black/50 border-b border-white/10 p-4 flex items-center gap-3">
+                <div className={`w-3 h-3 rounded-full ${currentUser ? 'bg-brutal-green' : 'bg-red-500'}`} style={{boxShadow: currentUser ? '0 0 6px #00FF85' : '0 0 6px #FF4757'}}></div>
+                <span className="font-mono font-bold text-white">AI Travel Assistant</span>
+
+                <div className="ml-auto flex items-center gap-4">
+                  <span className="text-sm font-mono text-white/40 hidden md:inline">
+                    {preferences.destination && `Destination: ${preferences.destination}`}
+                  </span>
+                  {currentUser ? (
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-sm font-bold text-white/90 border-b border-white/30">{currentUser.full_name || currentUser.email}</span>
+                      <button
+                        onClick={async () => {
+                          await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/auth/logout`, { method: 'POST', credentials: 'include' });
+                          setCurrentUser(null);
+                          signOut({ redirect: false });
+                        }}
+                        className="text-xs font-mono text-white/60 hover:text-red-400 underline"
+                      >
+                        LOGOUT
+                      </button>
+                      <button
+                        onClick={async () => {
+                          if (!window.confirm('Delete your account and all saved itineraries? This cannot be undone.')) return
+                          const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/auth/account`, { method: 'DELETE', credentials: 'include' })
+                          if (res.ok) {
+                            setCurrentUser(null)
+                            signOut({ redirect: false })
+                          }
+                        }}
+                        className="text-xs font-mono text-red-400 hover:text-red-300 underline"
+                      >
+                        DELETE
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setAuthModalOpen(true)}
+                      className="btn-brutal px-2 py-1 text-xs border-glow-cyan"
+                    >
+                      LOGIN
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* Messages Container */}
               <div
                 ref={chatContainerRef}
-                className="h-[400px] overflow-y-auto p-4 space-y-4 bg-background scrollbar-hide"
+                className="h-[400px] overflow-y-auto p-4 space-y-4 bg-black/40 scrollbar-hide"
               >
                 {messages.map((message) => (
                   <div
@@ -338,31 +520,31 @@ Just type your preferences and I'll create a personalized travel plan for you!`,
                       }
                     >
                       {message.agentSource && message.role === 'assistant' && (
-                        <div className="badge-brutal bg-brutal-blue mb-2 text-xs">
+                        <div className="badge-brutal border-glow-cyan mb-2 text-xs text-brutal-blue">
                           {message.agentSource}
                         </div>
                       )}
                       <p className="whitespace-pre-wrap">{message.content}</p>
-                      <span className="text-xs opacity-50 mt-2 block">
+                      <span className="text-xs opacity-50 mt-2 block" suppressHydrationWarning>
                         {message.timestamp.toLocaleTimeString()}
                       </span>
                       {message.uploadedImage && (
                         <div className="mt-2">
-                          <img src={message.uploadedImage} alt="Uploaded" className="max-h-48 rounded border-2 border-brutal-black" />
+                          <img src={message.uploadedImage} alt="Uploaded" className="max-h-48 rounded border border-white/20" />
                         </div>
                       )}
 
                       {message.creativeData && (
                         <div className="mt-4 w-full space-y-4">
                           {message.creativeData.poster_url && (
-                            <div className="card-brutal bg-white p-2">
-                              <p className="font-bold font-mono mb-1">🎬 Trip Poster</p>
+                            <div className="card-brutal p-2">
+                              <p className="font-bold font-mono mb-1 text-brutal-pink">🎬 Trip Poster</p>
                               <img src={message.creativeData.poster_url} alt="Trip Poster" className="w-full rounded" />
                             </div>
                           )}
                           {message.creativeData.video_url && (
-                            <div className="card-brutal bg-white p-2">
-                              <p className="font-bold font-mono mb-1">🎥 Teaser Trailer</p>
+                            <div className="card-brutal p-2">
+                              <p className="font-bold font-mono mb-1 text-brutal-purple">🎥 Teaser Trailer</p>
                               <video controls src={message.creativeData.video_url} className="w-full rounded" />
                             </div>
                           )}
@@ -375,6 +557,14 @@ Just type your preferences and I'll create a personalized travel plan for you!`,
                             itinerary={message.itineraryData.daily_itinerary || message.itineraryData.itinerary}
                             summary={message.itineraryData}
                           />
+                          {!savedIds.has(message.id) && (
+                            <button
+                              onClick={() => savePlan(message)}
+                              className="btn-brutal-green mt-3 text-sm"
+                            >
+                              💾 Save This Plan
+                            </button>
+                          )}
                         </div>
                       )}
                     </div>
@@ -383,24 +573,19 @@ Just type your preferences and I'll create a personalized travel plan for you!`,
 
                 {/* Loading indicator */}
                 {isLoading && (
-                  <div className="flex justify-start animate-slide-up">
-                    <div className="chat-bubble-assistant">
-                      <div className="flex items-center gap-2">
-                        <div className="spinner-brutal"></div>
-                        <span className="font-mono text-sm">Thinking...</span>
-                      </div>
-                    </div>
+                  <div className="animate-slide-up">
+                    <LoadingExperience />
                   </div>
                 )}
               </div>
 
               {/* Input Area */}
-              <div className="border-t-4 border-brutal-black p-4 bg-brutal-white">
+              <div className="border-t border-white/10 p-4 bg-black/50">
                 <div className="flex flex-col gap-2">
                   {selectedFile && (
-                    <div className="text-xs bg-brutal-yellow p-1 border border-brutal-black inline-block self-start">
+                    <div className="text-xs bg-black/60 text-brutal-yellow p-1 border border-brutal-yellow/30 inline-block self-start">
                       📎 {selectedFile.name}
-                      <button onClick={() => setSelectedFile(null)} className="ml-2 text-red-600 font-bold">X</button>
+                      <button onClick={() => setSelectedFile(null)} className="ml-2 text-red-400 font-bold">X</button>
                     </div>
                   )}
                   <div className="flex gap-3">
@@ -451,7 +636,7 @@ Just type your preferences and I'll create a personalized travel plan for you!`,
                     <button
                       key={suggestion}
                       onClick={() => setInputValue(suggestion)}
-                      className="badge-brutal bg-brutal-white hover:bg-brutal-yellow transition-colors cursor-pointer"
+                      className="badge-brutal cursor-pointer hover:bg-white/10 transition-colors text-white/60 hover:text-white"
                     >
                       {suggestion}
                     </button>
@@ -467,7 +652,7 @@ Just type your preferences and I'll create a personalized travel plan for you!`,
       <section id="how-it-works" className="py-16 md:py-24">
         <div className="container mx-auto px-4">
           <h2 className="text-4xl font-mono font-bold text-center mb-12">
-            <span className="bg-brutal-green px-4 py-2 border-4 border-brutal-black shadow-brutal">
+            <span className="bg-black/60 backdrop-blur-sm px-4 py-2 border border-brutal-green/40 text-brutal-green" style={{boxShadow:'0 0 16px rgba(0,255,133,0.2)'}}>
               HOW IT WORKS
             </span>
           </h2>
@@ -476,12 +661,12 @@ Just type your preferences and I'll create a personalized travel plan for you!`,
             <div className="space-y-8">
               {/* Step 1 */}
               <div className="flex gap-6 items-start">
-                <div className="w-16 h-16 bg-brutal-yellow border-4 border-brutal-black shadow-brutal flex items-center justify-center font-mono font-bold text-2xl shrink-0">
+                <div className="w-16 h-16 bg-black/60 backdrop-blur-sm border border-brutal-yellow/40 flex items-center justify-center font-mono font-bold text-2xl shrink-0 text-brutal-yellow" style={{boxShadow:'0 0 12px rgba(255,225,53,0.25)'}}>
                   1
                 </div>
                 <div className="card-brutal flex-1">
-                  <h3 className="text-xl font-mono font-bold mb-2">Share Your Preferences</h3>
-                  <p>
+                  <h3 className="text-xl font-mono font-bold mb-2 text-brutal-yellow">Share Your Preferences</h3>
+                  <p className="text-white/70">
                     Tell us about your dietary restrictions, travel style, budget,
                     and interests. Our Profiler Agent captures everything.
                   </p>
@@ -490,12 +675,12 @@ Just type your preferences and I'll create a personalized travel plan for you!`,
 
               {/* Step 2 */}
               <div className="flex gap-6 items-start">
-                <div className="w-16 h-16 bg-brutal-pink border-4 border-brutal-black shadow-brutal flex items-center justify-center font-mono font-bold text-2xl shrink-0">
+                <div className="w-16 h-16 bg-black/60 backdrop-blur-sm border border-brutal-pink/40 flex items-center justify-center font-mono font-bold text-2xl shrink-0 text-brutal-pink" style={{boxShadow:'0 0 12px rgba(255,107,157,0.25)'}}>
                   2
                 </div>
                 <div className="card-brutal flex-1">
-                  <h3 className="text-xl font-mono font-bold mb-2">AI Agents Collaborate</h3>
-                  <p>
+                  <h3 className="text-xl font-mono font-bold mb-2 text-brutal-pink">AI Agents Collaborate</h3>
+                  <p className="text-white/70">
                     Five specialized agents work together - analyzing trends,
                     finding destinations, filtering restaurants, and more.
                   </p>
@@ -504,12 +689,12 @@ Just type your preferences and I'll create a personalized travel plan for you!`,
 
               {/* Step 3 */}
               <div className="flex gap-6 items-start">
-                <div className="w-16 h-16 bg-brutal-blue border-4 border-brutal-black shadow-brutal flex items-center justify-center font-mono font-bold text-2xl shrink-0">
+                <div className="w-16 h-16 bg-black/60 backdrop-blur-sm border border-brutal-blue/40 flex items-center justify-center font-mono font-bold text-2xl shrink-0 text-brutal-blue" style={{boxShadow:'0 0 12px rgba(0,212,255,0.25)'}}>
                   3
                 </div>
                 <div className="card-brutal flex-1">
-                  <h3 className="text-xl font-mono font-bold mb-2">Get Your Perfect Plan</h3>
-                  <p>
+                  <h3 className="text-xl font-mono font-bold mb-2 text-brutal-blue">Get Your Perfect Plan</h3>
+                  <p className="text-white/70">
                     Receive a personalized, day-by-day itinerary optimized for
                     your preferences, with all dietary needs respected.
                   </p>
@@ -519,6 +704,100 @@ Just type your preferences and I'll create a personalized travel plan for you!`,
           </div>
         </div>
       </section>
+      {/* Auth Modal */}
+      {authModalOpen && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+          <div className="card-brutal max-w-md w-full animate-slide-up relative bg-[rgba(20,20,40,0.92)]">
+            <button
+              onClick={() => setAuthModalOpen(false)}
+              className="absolute top-2 right-2 text-xl font-bold text-white/60 hover:text-brutal-pink"
+            >
+              ✕
+            </button>
+            <h2 className="text-2xl font-mono font-bold mb-6 text-center text-white">
+              {isLoginMode ? 'WELCOME BACK' : 'JOIN THE TRIP'}
+            </h2>
+
+            <form onSubmit={handleAuth} className="space-y-4">
+              {!isLoginMode && (
+                <div>
+                  <label className="block font-mono font-bold text-sm mb-1 text-white/70">FULL NAME</label>
+                  <input
+                    type="text"
+                    required={!isLoginMode}
+                    value={authName}
+                    onChange={e => setAuthName(e.target.value)}
+                    className="input-brutal w-full"
+                    placeholder="John Doe"
+                  />
+                </div>
+              )}
+
+              <div>
+                <label className="block font-mono font-bold text-sm mb-1 text-white/70">EMAIL</label>
+                <input
+                  type="email"
+                  required
+                  value={authEmail}
+                  onChange={e => setAuthEmail(e.target.value)}
+                  className="input-brutal w-full"
+                  placeholder="traveler@example.com"
+                />
+              </div>
+
+              <div>
+                <label className="block font-mono font-bold text-sm mb-1 text-white/70">PASSWORD</label>
+                <input
+                  type="password"
+                  required
+                  value={authPassword}
+                  onChange={e => setAuthPassword(e.target.value)}
+                  className="input-brutal w-full"
+                  placeholder="••••••••"
+                />
+              </div>
+
+              {authError && (
+                <div className="bg-red-900/30 border border-red-500/50 text-red-400 p-2 font-mono text-xs">
+                  {authError}
+                </div>
+              )}
+
+              <button type="submit" className="btn-brutal-yellow w-full">
+                {isLoginMode ? 'LOGIN' : 'REGISTER'}
+              </button>
+            </form>
+
+            <div className="my-6 flex items-center gap-2 opacity-40">
+              <div className="h-px bg-white flex-1"></div>
+              <span className="font-mono text-xs text-white">OR</span>
+              <div className="h-px bg-white flex-1"></div>
+            </div>
+
+            <button
+              onClick={() => signIn('google')}
+              className="btn-brutal w-full flex items-center justify-center gap-2 border-glow-cyan"
+            >
+              <svg className="w-5 h-5" viewBox="0 0 24 24">
+                <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
+                <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
+                <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
+                <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
+              </svg>
+              Sign in with Google
+            </button>
+
+            <div className="mt-4 text-center">
+              <button
+                onClick={() => setIsLoginMode(!isLoginMode)}
+                className="text-sm font-mono underline text-white/60 hover:text-brutal-pink"
+              >
+                {isLoginMode ? 'Need an account? Register' : 'Already have an account? Login'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

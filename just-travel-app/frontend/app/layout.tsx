@@ -12,6 +12,7 @@
 
 import type { Metadata } from 'next'
 import NavHeader from '../components/NavHeader'
+import { Providers } from './providers'
 import './globals.css'
 
 /**
@@ -42,72 +43,74 @@ export default function RootLayout({
   return (
     <html lang="en" className="scroll-smooth">
       <body className="min-h-screen flex flex-col">
-        <NavHeader />
+        <Providers>
+          <NavHeader />
 
-        {/* Main content area */}
-        <main className="flex-1">
-          {children}
-        </main>
+          {/* Main content area */}
+          <main className="flex-1">
+            {children}
+          </main>
 
-        {/* Footer */}
-        <footer className="bg-brutal-black text-brutal-white border-t-4 border-brutal-yellow">
-          <div className="container mx-auto px-4 py-8">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-              {/* Brand column */}
-              <div>
-                <h2 className="text-xl font-mono font-bold mb-4">
-                  <span className="text-brutal-yellow">JUST</span> TRAVEL
-                </h2>
-                <p className="text-sm opacity-80">
-                  AI-powered travel planning that adapts to your unique preferences
-                  and dietary requirements.
-                </p>
+          {/* Footer */}
+          <footer className="bg-black/70 backdrop-blur-sm text-white border-t border-white/10">
+            <div className="container mx-auto px-4 py-8">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                {/* Brand column */}
+                <div>
+                  <h2 className="text-xl font-mono font-bold mb-4">
+                    <span className="text-brutal-blue">JUST</span> TRAVEL
+                  </h2>
+                  <p className="text-sm text-white/60">
+                    AI-powered travel planning that adapts to your unique preferences
+                    and dietary requirements.
+                  </p>
+                </div>
+
+                {/* Quick links */}
+                <div>
+                  <h3 className="text-lg font-mono font-bold mb-4 text-brutal-blue">
+                    Quick Links
+                  </h3>
+                  <ul className="space-y-2 text-sm">
+                    <li>
+                      <a href="#" className="text-white/60 hover:text-brutal-blue no-underline transition-colors">
+                        Plan a Trip
+                      </a>
+                    </li>
+                    <li>
+                      <a href="#" className="text-white/60 hover:text-brutal-blue no-underline transition-colors">
+                        Browse Destinations
+                      </a>
+                    </li>
+                    <li>
+                      <a href="#" className="text-white/60 hover:text-brutal-blue no-underline transition-colors">
+                        Travel Tips
+                      </a>
+                    </li>
+                  </ul>
+                </div>
+
+                {/* Contact */}
+                <div>
+                  <h3 className="text-lg font-mono font-bold mb-4 text-brutal-blue">
+                    Connect
+                  </h3>
+                  <p className="text-sm text-white/60 mb-2">
+                    Built with AI Agents
+                  </p>
+                  <p className="text-sm text-white/40">
+                    Phase 1 - Foundation
+                  </p>
+                </div>
               </div>
 
-              {/* Quick links */}
-              <div>
-                <h3 className="text-lg font-mono font-bold mb-4 text-brutal-yellow">
-                  Quick Links
-                </h3>
-                <ul className="space-y-2 text-sm">
-                  <li>
-                    <a href="#" className="opacity-80 hover:opacity-100 hover:text-brutal-yellow no-underline">
-                      Plan a Trip
-                    </a>
-                  </li>
-                  <li>
-                    <a href="#" className="opacity-80 hover:opacity-100 hover:text-brutal-yellow no-underline">
-                      Browse Destinations
-                    </a>
-                  </li>
-                  <li>
-                    <a href="#" className="opacity-80 hover:opacity-100 hover:text-brutal-yellow no-underline">
-                      Travel Tips
-                    </a>
-                  </li>
-                </ul>
-              </div>
-
-              {/* Contact */}
-              <div>
-                <h3 className="text-lg font-mono font-bold mb-4 text-brutal-yellow">
-                  Connect
-                </h3>
-                <p className="text-sm opacity-80 mb-2">
-                  Built with AI Agents
-                </p>
-                <p className="text-sm opacity-60">
-                  Phase 1 - Foundation
-                </p>
+              {/* Copyright */}
+              <div className="mt-8 pt-4 border-t border-white/10 text-center text-sm text-white/40">
+                <p>&copy; 2025 Just Travel. Built for the Hackathon.</p>
               </div>
             </div>
-
-            {/* Copyright */}
-            <div className="mt-8 pt-4 border-t border-brutal-white/20 text-center text-sm opacity-60">
-              <p>&copy; 2024 Just Travel. Built for the Hackathon.</p>
-            </div>
-          </div>
-        </footer>
+          </footer>
+        </Providers>
       </body>
     </html>
   )

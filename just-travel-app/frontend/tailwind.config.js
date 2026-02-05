@@ -7,7 +7,6 @@ module.exports = {
   ],
   theme: {
     extend: {
-      // Neo-brutalist color palette
       colors: {
         'brutal': {
           'black': '#000000',
@@ -20,33 +19,34 @@ module.exports = {
           'orange': '#FF9F43',
           'red': '#FF4757',
         },
-        'background': '#F5F5DC', // Beige background
+        'background': '#0f0f23',
       },
-      // Neo-brutalist box shadows (hard shadows, no blur)
       boxShadow: {
-        'brutal': '4px 4px 0px 0px #000000',
-        'brutal-lg': '8px 8px 0px 0px #000000',
-        'brutal-xl': '12px 12px 0px 0px #000000',
-        'brutal-hover': '2px 2px 0px 0px #000000',
+        'brutal': '0 4px 24px rgba(0,0,0,0.4), 0 0 1px rgba(255,255,255,0.08)',
+        'brutal-lg': '0 8px 40px rgba(0,0,0,0.5), 0 0 20px rgba(185,103,255,0.12)',
+        'brutal-xl': '0 12px 48px rgba(0,0,0,0.6), 0 0 30px rgba(0,212,255,0.08)',
+        'brutal-hover': '0 2px 12px rgba(0,0,0,0.3), 0 0 8px rgba(0,212,255,0.2)',
       },
-      // Border widths for brutalist design
       borderWidth: {
         '3': '3px',
         '4': '4px',
       },
-      // Custom fonts
       fontFamily: {
         'mono': ['Space Mono', 'Courier New', 'monospace'],
         'sans': ['Space Grotesk', 'Arial', 'sans-serif'],
       },
-      // Animation for interactions
       animation: {
         'bounce-brutal': 'bounce-brutal 0.3s ease-in-out',
+        'glow-pulse': 'glow-pulse 3s ease-in-out infinite',
       },
       keyframes: {
         'bounce-brutal': {
           '0%, 100%': { transform: 'translateY(0)' },
           '50%': { transform: 'translateY(-4px)' },
+        },
+        'glow-pulse': {
+          '0%, 100%': { opacity: '0.5' },
+          '50%': { opacity: '1' },
         },
       },
     },
