@@ -29,18 +29,18 @@ interface DayPlan {
 
 interface ItineraryProps {
     itinerary: DayPlan[]
-    summary: {
-        total_days: number
-        total_activities: number
-        estimated_total_cost: number
-        day_themes: string[]
-    }
+    summary?: unknown
 }
 
-export function ItineraryView({ itinerary, summary }: ItineraryProps) {
+export function ItineraryView({ itinerary }: ItineraryProps) {
     const [activeDay, setActiveDay] = React.useState(1)
 
     if (!itinerary || itinerary.length === 0) return null
+
+    // Derive stats directly from the itinerary data
+    const totalDays = itinerary.length
+    const totalActivities = itinerary.reduce((sum, day) => sum + (day.time_slots?.length || 0), 0)
+    const totalCost = itinerary.reduce((sum, day) => sum + (day.estimated_cost || 0), 0)
 
     const currentDay = itinerary.find(d => d.day_number === activeDay) || itinerary[0]
 
@@ -53,15 +53,15 @@ export function ItineraryView({ itinerary, summary }: ItineraryProps) {
                 </h3>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
                     <div className="p-2 border-2 border-brutal-black bg-brutal-blue text-center">
-                        <span className="block text-2xl font-bold">{summary.total_days}</span>
+                        <span className="block text-2xl font-bold">{totalDays}</span>
                         <span className="text-xs font-mono uppercase">Days</span>
                     </div>
                     <div className="p-2 border-2 border-brutal-black bg-brutal-green text-center">
-                        <span className="block text-2xl font-bold">{summary.total_activities}</span>
+                        <span className="block text-2xl font-bold">{totalActivities}</span>
                         <span className="text-xs font-mono uppercase">Activities</span>
                     </div>
                     <div className="p-2 border-2 border-brutal-black bg-brutal-pink text-center">
-                        <span className="block text-2xl font-bold">${summary.estimated_total_cost}</span>
+                        <span className="block text-2xl font-bold">${totalCost}</span>
                         <span className="text-xs font-mono uppercase">Est. Cost</span>
                     </div>
                     <div className="p-2 border-2 border-brutal-black bg-brutal-orange text-center">

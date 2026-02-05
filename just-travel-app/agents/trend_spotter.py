@@ -8,13 +8,8 @@ It extracts 'vibes' and trending locations from raw social data.
 
 import logging
 import json
-import sys
-import os
 from typing import Optional
 from agents.base import BaseAgent
-
-# Add parent directory to path for imports
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from tools.social_tools import SocialTools
 
@@ -54,20 +49,21 @@ class TrendSpotterAgent(BaseAgent):
             
             # 2. Validate Data Presence
             if raw_count == 0:
-                logger.warning(f"No social data found for {current_location}. broadening search...")
-                current_location = await self._generate_broadening_query(current_location, attempt)
-                continue # Retry with new location
-                
+                if attempt < max_retries:
+                    logger.warning(f"No social data found for {current_location}. Broadening search...")
+                    current_location = await self._generate_broadening_query(current_location)
+                continue
+
             # 3. LLM Synthesis
             final_trends = await self._synthesize_trends(current_location, raw_trends, formatted_posts)
-            
+
             # 4. Validate Synthesis Result
             if final_trends:
                 logger.info(f"Successfully found {len(final_trends)} trends for {current_location}")
                 break
-            else:
+            elif attempt < max_retries:
                 logger.warning(f"Synthesis returned empty trends for {current_location}. Retrying...")
-                current_location = await self._generate_broadening_query(current_location, attempt)
+                current_location = await self._generate_broadening_query(current_location)
             
         return {
             "agent": self.name,
@@ -88,11 +84,8 @@ class TrendSpotterAgent(BaseAgent):
             logger.error(f"Error fetching social data: {e}")
             return [], []
 
-    async def _generate_broadening_query(self, location: str, attempt: int) -> str:
+    async def _generate_broadening_query(self, location: str) -> str:
         """Uses LLM to generate a broader search term if the specific one fails."""
-        if attempt >= 3:
-             return location # Don't broaden on last attempt, just fail gracefully or keep same
-             
         prompt = f"""
         The user is searching for travel trends in '{location}', but we found ZERO social media results.
         We need a BROADER, more popular related location to search instead.
@@ -144,8 +137,7 @@ class TrendSpotterAgent(BaseAgent):
         response_text = await self.generate_response(prompt)
         
         try:
-            clean_text = response_text.replace("```json", "").replace("```", "").strip()
-            data = json.loads(clean_text)
+            data = self.parse_json_response(response_text)
             return data.get("trends", [])
         except Exception as e:
             logger.error(f"TrendSpotter synthesis error: {e}")

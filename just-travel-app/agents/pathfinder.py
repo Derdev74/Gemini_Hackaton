@@ -1,13 +1,7 @@
 import logging
-import json
-import sys
-import os
 import asyncio
 from typing import Optional
 from agents.base import BaseAgent
-
-# Add parent directory to path for imports
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from tools.cypher_tools import CypherTools
 from tools.transport_tools import TransportTools
@@ -68,34 +62,31 @@ class PathfinderAgent(BaseAgent):
         intent = "unknown"
         
         try:
-            clean_text = response_text.replace("```json", "").replace("```", "").strip()
-            decision = json.loads(clean_text)
-            
+            decision = self.parse_json_response(response_text)
+
             intent = decision.get("intent", "")
             tool_name = decision.get("tool_call")
             args = decision.get("arguments", {})
-            
+
             logger.info(f"Pathfinder deciding to call: {tool_name} with {args}")
-            
-            # 2. Execute Tool
+
+            # 2. Execute Tool — all wrapped in to_thread to avoid blocking the event loop
             if tool_name == "plan_door_to_door":
-                # Composite Tool Execution
                 results = await self._execute_door_to_door(args)
             elif tool_name == "search_flights":
-                results = self.transport_tools.search_flights(**args)
+                results = await asyncio.to_thread(self.transport_tools.search_flights, **args)
             elif tool_name == "find_by_category":
-                results = self.cypher_tools.find_by_category(**args)
+                results = await asyncio.to_thread(self.cypher_tools.find_by_category, **args)
             elif tool_name == "find_destinations_in_region":
-                results = self.cypher_tools.find_destinations_in_region(**args)
+                results = await asyncio.to_thread(self.cypher_tools.find_destinations_in_region, **args)
             elif tool_name == "find_nearby_destinations":
-                results = self.cypher_tools.find_nearby_destinations(**args)
+                results = await asyncio.to_thread(self.cypher_tools.find_nearby_destinations, **args)
             elif tool_name == "find_connected_destinations":
-                results = self.cypher_tools.find_connected_destinations(**args)
+                results = await asyncio.to_thread(self.cypher_tools.find_connected_destinations, **args)
             elif tool_name == "search_destinations":
-                results = self.cypher_tools.search_destinations(**args)
+                results = await asyncio.to_thread(self.cypher_tools.search_destinations, **args)
             else:
-                # Fallback
-                results = self.cypher_tools.search_destinations(location=args.get("location"))
+                results = await asyncio.to_thread(self.cypher_tools.search_destinations, location=args.get("location"))
 
         except Exception as e:
             logger.error(f"Pathfinder error: {e}")
@@ -111,26 +102,20 @@ class PathfinderAgent(BaseAgent):
 
     async def _execute_door_to_door(self, args: dict) -> list:
         """
-        Helper method to execute multi-modal routing.
+        Execute multi-modal routing — flight + ground transfers run in parallel.
         """
         origin_addr = args.get("origin_address")
         dest_addr = args.get("dest_address")
         origin_iata = args.get("origin_iata")
         dest_iata = args.get("dest_iata")
         date = args.get("date")
-        
-        # We need to run these in parallel or sequence
-        # 1. Flight Search
-        flight_results = self.transport_tools.search_flights(origin_iata, dest_iata, date)
-        
-        # 2. Directions (Origin -> Airport)
-        # Assuming we can guess airport name from IATA, or just use generic "Airport"
-        # For hackathon, we query directions to the City+Airport
-        directions_start = self.maps_tools.get_directions(origin_addr, f"{origin_iata} Airport")
-        
-        # 3. Directions (Airport -> Dest)
-        directions_end = self.maps_tools.get_directions(f"{dest_iata} Airport", dest_addr)
-        
+
+        flight_results, directions_start, directions_end = await asyncio.gather(
+            asyncio.to_thread(self.transport_tools.search_flights, origin_iata, dest_iata, date),
+            asyncio.to_thread(self.maps_tools.get_directions, origin_addr, f"{origin_iata} Airport"),
+            asyncio.to_thread(self.maps_tools.get_directions, f"{dest_iata} Airport", dest_addr),
+        )
+
         return [{
             "type": "door_to_door_plan",
             "segments": [

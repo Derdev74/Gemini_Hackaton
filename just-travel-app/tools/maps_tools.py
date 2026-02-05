@@ -394,8 +394,7 @@ class MapsTools:
             for photo in photos:
                 photo_ref = photo.get("photo_reference")
                 if photo_ref:
-                    # Construct photo URL
-                    url = f"https://maps.googleapis.com/maps/api/place/photo?maxwidth=400&photoreference={photo_ref}&key={self.api_key}"
+                    url = f"/api/proxy/photo?ref={photo_ref}"
                     photo_urls.append(url)
 
             return photo_urls

@@ -84,8 +84,7 @@ class OptimizerAgent(BaseAgent):
         
         final_plan = {}
         try:
-            clean_text = response_text.replace("```json", "").replace("```", "").strip()
-            final_plan = json.loads(clean_text)
+            final_plan = self.parse_json_response(response_text)
             
             # Simple validation/patching of dates
             self._patch_dates(final_plan, start_date_str)

@@ -28,6 +28,8 @@ interface Message {
   timestamp: Date
   agentSource?: string
   itineraryData?: any
+  uploadedImage?: string
+  creativeData?: any
 }
 
 /**
@@ -51,6 +53,7 @@ interface AgentResponse {
   profile?: unknown
   itinerary?: unknown
   message?: string
+  creative?: { poster_url?: string; video_url?: string }
 }
 
 /**
@@ -79,10 +82,12 @@ Just type your preferences and I'll create a personalized travel plan for you!`,
   const [inputValue, setInputValue] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [preferences, setPreferences] = useState<TravelPreferences>({})
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
 
   // Refs
   const chatContainerRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {
@@ -95,17 +100,43 @@ Just type your preferences and I'll create a personalized travel plan for you!`,
    * Send message to backend and get response
    */
   const sendMessage = async () => {
-    if (!inputValue.trim() || isLoading) return
+    if ((!inputValue.trim() && !selectedFile) || isLoading) return
+
+    let uploadedUrl = ''
+
+    // 1. Handle File Upload if present
+    if (selectedFile) {
+      try {
+        const formData = new FormData()
+        formData.append('file', selectedFile)
+
+        const uploadRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/upload`, {
+          method: 'POST',
+          body: formData
+        })
+
+        if (uploadRes.ok) {
+          const data = await uploadRes.json()
+          uploadedUrl = data.url
+        } else {
+          console.error("Upload failed")
+        }
+      } catch (e) {
+        console.error("Upload error", e)
+      }
+    }
 
     const userMessage: Message = {
       id: `user-${Date.now()}`,
       role: 'user',
       content: inputValue,
-      timestamp: new Date()
+      timestamp: new Date(),
+      uploadedImage: uploadedUrl
     }
 
     setMessages(prev => [...prev, userMessage])
     setInputValue('')
+    setSelectedFile(null)
     setIsLoading(true)
 
     try {
@@ -114,7 +145,8 @@ Just type your preferences and I'll create a personalized travel plan for you!`,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           message: inputValue,
-          preferences: preferences
+          preferences: preferences,
+          uploaded_file: uploadedUrl || undefined
         })
       })
 
@@ -128,7 +160,8 @@ Just type your preferences and I'll create a personalized travel plan for you!`,
         content: response.message || 'I received your request.',
         timestamp: new Date(),
         agentSource: response.agent,
-        itineraryData: response.itinerary
+        itineraryData: response.itinerary,
+        creativeData: response.creative
       }
 
       setMessages(prev => [...prev, assistantMessage])
@@ -313,6 +346,29 @@ Just type your preferences and I'll create a personalized travel plan for you!`,
                       <span className="text-xs opacity-50 mt-2 block">
                         {message.timestamp.toLocaleTimeString()}
                       </span>
+                      {message.uploadedImage && (
+                        <div className="mt-2">
+                          <img src={message.uploadedImage} alt="Uploaded" className="max-h-48 rounded border-2 border-brutal-black" />
+                        </div>
+                      )}
+
+                      {message.creativeData && (
+                        <div className="mt-4 w-full space-y-4">
+                          {message.creativeData.poster_url && (
+                            <div className="card-brutal bg-white p-2">
+                              <p className="font-bold font-mono mb-1">🎬 Trip Poster</p>
+                              <img src={message.creativeData.poster_url} alt="Trip Poster" className="w-full rounded" />
+                            </div>
+                          )}
+                          {message.creativeData.video_url && (
+                            <div className="card-brutal bg-white p-2">
+                              <p className="font-bold font-mono mb-1">🎥 Teaser Trailer</p>
+                              <video controls src={message.creativeData.video_url} className="w-full rounded" />
+                            </div>
+                          )}
+                        </div>
+                      )}
+
                       {message.itineraryData && (
                         <div className="mt-4 w-full">
                           <ItineraryView
@@ -340,24 +396,48 @@ Just type your preferences and I'll create a personalized travel plan for you!`,
 
               {/* Input Area */}
               <div className="border-t-4 border-brutal-black p-4 bg-brutal-white">
-                <div className="flex gap-3">
-                  <input
-                    ref={inputRef}
-                    type="text"
-                    value={inputValue}
-                    onChange={(e) => setInputValue(e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    placeholder="Tell me about your dream trip..."
-                    className="input-brutal flex-1"
-                    disabled={isLoading}
-                  />
-                  <button
-                    onClick={sendMessage}
-                    disabled={isLoading || !inputValue.trim()}
-                    className="btn-brutal-green disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {isLoading ? '...' : 'SEND'}
-                  </button>
+                <div className="flex flex-col gap-2">
+                  {selectedFile && (
+                    <div className="text-xs bg-brutal-yellow p-1 border border-brutal-black inline-block self-start">
+                      📎 {selectedFile.name}
+                      <button onClick={() => setSelectedFile(null)} className="ml-2 text-red-600 font-bold">X</button>
+                    </div>
+                  )}
+                  <div className="flex gap-3">
+                    <input
+                      type="file"
+                      ref={fileInputRef}
+                      className="hidden"
+                      onChange={(e) => {
+                        if (e.target.files?.[0]) setSelectedFile(e.target.files[0])
+                      }}
+                      accept="image/*"
+                    />
+                    <button
+                      className="btn-brutal px-3"
+                      onClick={() => fileInputRef.current?.click()}
+                      title="Upload Image"
+                    >
+                      📎
+                    </button>
+                    <input
+                      ref={inputRef}
+                      type="text"
+                      value={inputValue}
+                      onChange={(e) => setInputValue(e.target.value)}
+                      onKeyDown={handleKeyDown}
+                      placeholder="Tell me about your dream trip..."
+                      className="input-brutal flex-1"
+                      disabled={isLoading}
+                    />
+                    <button
+                      onClick={sendMessage}
+                      disabled={isLoading || (!inputValue.trim() && !selectedFile)}
+                      className="btn-brutal-green disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {isLoading ? '...' : 'SEND'}
+                    </button>
+                  </div>
                 </div>
 
                 {/* Quick action buttons */}

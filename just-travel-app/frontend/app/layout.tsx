@@ -11,6 +11,7 @@
  */
 
 import type { Metadata } from 'next'
+import NavHeader from '../components/NavHeader'
 import './globals.css'
 
 /**
@@ -41,46 +42,7 @@ export default function RootLayout({
   return (
     <html lang="en" className="scroll-smooth">
       <body className="min-h-screen flex flex-col">
-        {/* Header */}
-        <header className="sticky top-0 z-50 bg-brutal-yellow border-b-4 border-brutal-black">
-          <nav className="container mx-auto px-4 py-4">
-            <div className="flex items-center justify-between">
-              {/* Logo */}
-              <a href="/" className="no-underline">
-                <h1 className="text-2xl md:text-3xl font-mono font-bold tracking-tight">
-                  <span className="text-brutal-black">JUST</span>
-                  <span className="bg-brutal-black text-brutal-white px-2 ml-1">TRAVEL</span>
-                </h1>
-              </a>
-
-              {/* Navigation links */}
-              <div className="hidden md:flex items-center gap-6">
-                <a
-                  href="#features"
-                  className="font-mono font-bold uppercase text-sm hover:text-brutal-pink no-underline"
-                >
-                  Features
-                </a>
-                <a
-                  href="#how-it-works"
-                  className="font-mono font-bold uppercase text-sm hover:text-brutal-pink no-underline"
-                >
-                  How It Works
-                </a>
-                <button className="btn-brutal-pink text-sm">
-                  Start Planning
-                </button>
-              </div>
-
-              {/* Mobile menu button */}
-              <button className="md:hidden p-2 border-2 border-brutal-black bg-brutal-white">
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="square" strokeWidth={3} d="M4 6h16M4 12h16M4 18h16" />
-                </svg>
-              </button>
-            </div>
-          </nav>
-        </header>
+        <NavHeader />
 
         {/* Main content area */}
         <main className="flex-1">

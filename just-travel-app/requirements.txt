@@ -1,8 +1,7 @@
 # Just Travel App - Python Dependencies
 # ======================================
 
-# Google ADK (Agent Development Kit) for building AI agents
-google-adk>=0.1.0
+# Google Generative AI SDK
 google-genai>=0.1.0
 
 # Neo4j Python driver for graph database operations
@@ -38,3 +37,6 @@ slowapi>=0.1.9
 
 # Flight Data
 amadeus>=9.0.0
+
+# Image processing (used by creative_tools for Veo image-to-video)
+Pillow>=10.0.0

@@ -3,6 +3,8 @@
 *.log
 .vscode/
 .idea/
+.claude/
+.venv/
 
 # Python
 __pycache__/
@@ -32,6 +34,7 @@ htmlcov/
 venv/
 ENV/
 env/
+myenv/
 
 # Environment Variables
 .env

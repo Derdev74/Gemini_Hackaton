@@ -9,6 +9,8 @@ and Gemini Vision for visual trend analysis.
 import os
 import logging
 import asyncio
+import ipaddress
+import urllib.parse
 from typing import Optional, Dict
 from datetime import datetime
 from google import genai
@@ -127,6 +129,24 @@ class SocialTools:
             logger.error(f"Apify search failed: {e}")
             return self._get_mock_search_results(platform, queries, limit)
 
+    @staticmethod
+    def _is_safe_url(url: str) -> bool:
+        """Block direct references to private/reserved IPs to mitigate SSRF."""
+        try:
+            parsed = urllib.parse.urlparse(url)
+            if parsed.scheme not in ('http', 'https'):
+                return False
+            host = parsed.hostname
+            if not host:
+                return False
+            try:
+                ip = ipaddress.ip_address(host)
+                return not (ip.is_private or ip.is_loopback or ip.is_reserved or ip.is_link_local)
+            except ValueError:
+                return True  # hostname, not a raw IP — allow
+        except Exception:
+            return False
+
     async def analyze_visual_vibe(self, content_url: str) -> Dict:
         """
         Analyze the 'vibe' of a piece of visual content using Gemini Vision.
@@ -139,7 +159,10 @@ class SocialTools:
             if not self.genai_client:
                  return {"vibe_description": "Vision AI not configured"}
 
-            # 1. Download the image bytes
+            if not self._is_safe_url(content_url):
+                logger.warning(f"Blocked unsafe URL: {content_url}")
+                return {"vibe_description": "URL blocked by safety check.", "error": "Unsafe URL"}
+
             logger.info(f"Downloading content for analysis: {content_url}")
             response = requests.get(content_url, timeout=10)
             response.raise_for_status()

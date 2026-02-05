@@ -17,11 +17,13 @@ from .pathfinder import PathfinderAgent
 from .trend_spotter import TrendSpotterAgent
 from .concierge import ConciergeAgent
 from .optimizer import OptimizerAgent
+from .creative_director import CreativeDirectorAgent
 
 __all__ = [
     "ProfilerAgent",
     "PathfinderAgent",
     "TrendSpotterAgent",
     "ConciergeAgent",
-    "OptimizerAgent"
+    "OptimizerAgent",
+    "CreativeDirectorAgent"
 ]

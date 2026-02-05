@@ -29,6 +29,7 @@ class TravelerProfile:
     group_size: int = 1
     interests: list = field(default_factory=list)
     language_preferences: list = field(default_factory=lambda: ["English"])
+    destination: str = ""
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -41,26 +42,32 @@ class ProfilerAgent(BaseAgent):
 
     def __init__(self):
         super().__init__(name="profiler", description="Captures user preferences using LLM", model_type="flash")
-        self.current_profile = TravelerProfile()
-        logger.info(f"ProfilerAgent initialized with LLM")
+        logger.info("ProfilerAgent initialized with LLM")
 
     async def async_process(self, query: str, context: Optional[dict] = None) -> dict:
         """
         Process a user query to extract profile information using LLM.
+        Profile state is reconstructed from context each call — no shared mutable state.
         """
         context = context or {}
-        
-        # Construct Prompt
+
+        # Reconstruct profile from incoming context (stateless, safe for concurrent requests)
+        current_profile = TravelerProfile()
+        for key, value in context.get("profile", {}).items():
+            if hasattr(current_profile, key):
+                setattr(current_profile, key, value)
+
         prompt = f"""
         Analyze the following user input and extract travel profile information.
-        
+
         User Input: "{query}"
-        
+
         Current Profile State:
-        {json.dumps(self.current_profile.to_dict(), indent=2)}
-        
+        {json.dumps(current_profile.to_dict(), indent=2)}
+
         Task:
         1. Identify any NEW or UPDATED:
+           - destination (the city/country the user wants to visit)
            - dietary_restrictions (e.g., vegetarian, vegan)
            - religious_requirements (e.g., halal, kosher)
            - allergies
@@ -71,7 +78,7 @@ class ProfilerAgent(BaseAgent):
         2. Merge with the Current Profile State.
         3. Highlight what specifically changed.
         4. Generate 1-2 relevant follow-up questions if critical info is missing.
-        
+
         Output JSON format ONLY:
         {{
             "profile": {{ ...complete profile object... }},
@@ -79,49 +86,41 @@ class ProfilerAgent(BaseAgent):
             "follow_up_questions": ["question 1"]
         }}
         """
-        
-        # Call LLM
+
         response_text = await self.generate_response(prompt, context=context)
-        
-        # Parse result
+
         try:
-            # Simple cleanup for potential markdown code blocks
-            clean_text = response_text.replace("```json", "").replace("```", "").strip()
-            data = json.loads(clean_text)
-            
-            # Update internal state
+            data = self.parse_json_response(response_text)
+
             new_profile_data = data.get("profile", {})
-            self._update_profile(new_profile_data)
-            
+            self._update_profile(current_profile, new_profile_data)
+
             return {
                 "agent": self.name,
-                "profile": self.current_profile.to_dict(),
+                "profile": current_profile.to_dict(),
                 "extracted_preferences": data.get("changes", []),
                 "follow_up_questions": data.get("follow_up_questions", []),
                 "status": "profile_updated"
             }
-            
+
         except json.JSONDecodeError:
             logger.error(f"Failed to parse LLM response: {response_text}")
-            # Fallback to returning current state with a generic message
             return {
                 "agent": self.name,
-                "profile": self.current_profile.to_dict(),
+                "profile": current_profile.to_dict(),
                 "extracted_preferences": [],
                 "follow_up_questions": ["Could you provide more details about your trip?"],
                 "status": "error_parsing_llm"
             }
 
-    def _update_profile(self, new_data: dict):
-        """Update the dataclass with new dictionary data."""
+    @staticmethod
+    def _update_profile(profile: TravelerProfile, new_data: dict):
+        """Merge new data into the profile dataclass."""
         for key, value in new_data.items():
-            if hasattr(self.current_profile, key):
-                current_attr = getattr(self.current_profile, key)
-                # If both are lists, extend to avoid losing previous data (e.g. existing allergies)
+            if hasattr(profile, key):
+                current_attr = getattr(profile, key)
                 if isinstance(current_attr, list) and isinstance(value, list):
-                    # Use set to avoid duplicates while merging
                     merged = list(set(current_attr + value))
-                    setattr(self.current_profile, key, merged)
+                    setattr(profile, key, merged)
                 else:
-                    # Simple overwrite for scalars
-                    setattr(self.current_profile, key, value)
+                    setattr(profile, key, value)

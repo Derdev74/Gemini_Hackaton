@@ -13,6 +13,7 @@ It supports:
 """
 
 import os
+import json
 import logging
 import asyncio
 from google import genai
@@ -89,5 +90,11 @@ class BaseAgent:
         context_str = ""
         if context:
             context_str = f"\nCONTEXT:\n{context}\n"
-            
+
         return f"{base_prompt}{context_str}"
+
+    @staticmethod
+    def parse_json_response(text: str) -> dict:
+        """Strip markdown code fences and parse JSON. Raises json.JSONDecodeError on failure."""
+        clean = text.replace("```json", "").replace("```", "").strip()
+        return json.loads(clean)

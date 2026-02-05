@@ -1,12 +1,7 @@
 import logging
-import json
-import sys
-import os
+import asyncio
 from typing import Optional
 from agents.base import BaseAgent
-
-# Add parent directory to path for imports
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from tools.maps_tools import MapsTools
 from tools.booking_tools import BookingTools
@@ -73,36 +68,33 @@ class ConciergeAgent(BaseAgent):
         parsed = {}
         
         try:
-            clean_text = response_text.replace("```json", "").replace("```", "").strip()
-            parsed = json.loads(clean_text)
-            
+            parsed = self.parse_json_response(response_text)
+
             tool_name = parsed.get("tool_call")
             args = parsed.get("arguments", {})
-            
+
             logger.info(f"Concierge deciding to call: {tool_name} with {args}")
-            
+
             if tool_name == "search_hotels":
-                # Use Booking Tools
-                results = self.booking_tools.search_hotels(**args)
+                results = await asyncio.to_thread(self.booking_tools.search_hotels, **args)
             else:
-                # Default to Maps Tools (search_places)
-                # Need to map args to MapsTools.search_places signature if needed, 
-                # but let's assume LLM follows the schema for search_places args broadly
-                results = self.maps_tools.search_places(
+                results = await asyncio.to_thread(
+                    self.maps_tools.search_places,
                     query=args.get("query") or args.get("location"),
                     place_type=args.get("place_type", "restaurant"),
                     location=args.get("location"),
                     price_levels=args.get("price_levels"),
                     open_now=args.get("open_now")
                 )
-                
-                # Enrich top results only for Maps searches
-                if results and len(results) > 0:
-                     enriched = []
-                     for place in results[:5]:
-                        details = self.maps_tools.get_place_details(place.get("place_id"))
-                        enriched.append({**place, "details": details})
-                     results = enriched
+
+                # Enrich top results in parallel
+                if results:
+                    detail_tasks = [
+                        asyncio.to_thread(self.maps_tools.get_place_details, place.get("place_id"))
+                        for place in results[:5]
+                    ]
+                    details_list = await asyncio.gather(*detail_tasks)
+                    results = [{**place, "details": details} for place, details in zip(results[:5], details_list)]
 
         except Exception as e:
             logger.error(f"Concierge error: {e}")
