@@ -82,7 +82,7 @@ class BookingTools:
             
         except Exception as e:
             logger.error(f"Location resolution error: {e}")
-            raise e
+            raise
 
     def _fetch_properties(self, dest_id, search_type, checkin, checkout, adults, rooms, currency, location):
         """Step 2: Get properties list"""
@@ -138,7 +138,7 @@ class BookingTools:
             
         except Exception as e:
             logger.error(f"Property fetch error: {e}")
-            raise e
+            raise
 
     def _get_mock_hotels(self, location: str) -> List[Dict]:
         """Return mock hotel data."""

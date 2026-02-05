@@ -8,10 +8,11 @@ story-driven daily itinerary. It acts as the final composer.
 
 import logging
 import json
-import math
+import asyncio
 from typing import Optional
 from datetime import datetime, timedelta
 from agents.base import BaseAgent
+from tools.weather_tools import WeatherTools
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +23,8 @@ class OptimizerAgent(BaseAgent):
 
     def __init__(self):
         super().__init__(name="optimizer", description="Synthesizes final itinerary using LLM", model_type="pro")
-        logger.info("OptimizerAgent initialized with LLM")
+        self.weather_tools = WeatherTools()
+        logger.info("OptimizerAgent initialized with LLM + WeatherTools")
 
     async def async_process(self, query: str, context: Optional[dict] = None) -> dict:
         """
@@ -35,27 +37,57 @@ class OptimizerAgent(BaseAgent):
         destinations = context.get("destinations", [])
         accommodations = context.get("accommodations", [])
         trends = context.get("trends", [])
-        
+
         # Default start date if missing
         start_date_str = datetime.now().strftime("%Y-%m-%d")
-        
+
+        # Resolve destination city for weather lookup
+        dest_city = profile.get("destination") or ""
+        if not dest_city and destinations:
+            dest_city = destinations[0].get("name", "")
+
+        # Fetch weather forecast (non-blocking)
+        weather_data = {}
+        weather_section = ""
+        if dest_city:
+            try:
+                weather_data = await asyncio.to_thread(
+                    self.weather_tools.get_forecast, dest_city, 5
+                )
+                forecasts = weather_data.get("forecasts", [])
+                if forecasts:
+                    lines = []
+                    for f in forecasts:
+                        line = f"{f['date']}: {f['condition']}, {f['temp_min_c']}–{f['temp_max_c']}°C"
+                        if f.get("advisory"):
+                            line += f"  {f['advisory']}"
+                        lines.append(line)
+                    weather_section = "Weather Forecast:\n" + "\n".join(lines)
+            except Exception as e:
+                logger.warning(f"Weather fetch failed for '{dest_city}': {e}")
+
         prompt = f"""
         You are the Master Travel Planner. Create a detailed, logical itinerary.
-        
+
         User Query: "{query}"
         Profile: {json.dumps(profile, default=str)}
-        
+
         Research Data:
         - Top Destinations Found: {self._summarize_list(destinations, 'name')}
         - Accommodations/Restaurants: {self._summarize_list(accommodations, 'name')}
         - Viral Trends: {self._summarize_list(trends, 'title')}
-        
+
+        {weather_section}
+
         Constraints:
         - Create a valid daily schedule.
         - Respect opening times if known (or assume standard 9am-5pm for museums, evening for dinner).
         - Group locations logically by geography to minimize travel time.
         - Include "estimated_cost" and "total_travel_time" estimates.
-        
+        - If the weather forecast shows rain, storms, or extreme temperatures on a given day,
+          avoid scheduling outdoor activities (hiking, swimming, cycling, beach visits) on that day.
+          Replace them with indoor alternatives and add a note referencing the weather.
+
         Output JSON Schema ONLY:
         {{
             "summary": "Brief exciting narrative summary of the trip",

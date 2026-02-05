@@ -15,11 +15,11 @@ class PathfinderAgent(BaseAgent):
     """
 
     def __init__(self):
-        super().__init__(name="pathfinder", description="Finds destinations using LLM + Graph", model_type="pro")
+        super().__init__(name="pathfinder", description="Finds destinations using LLM + Graph", model_type="flash")
         self.cypher_tools = CypherTools()
         self.transport_tools = TransportTools()
         self.maps_tools = MapsTools()
-        logger.info("PathfinderAgent initialized with LLM, Transport, and Maps Tools")
+        logger.info("PathfinderAgent initialized with LLM, Transport, and Maps (Google Search via grounding)")
 
     async def async_process(self, query: str, context: Optional[dict] = None) -> dict:
         """
@@ -44,6 +44,8 @@ class PathfinderAgent(BaseAgent):
         - find_nearby_destinations(location, max_distance_km, limit)
         - find_connected_destinations(location, connection_types, limit)
         - search_destinations(categories, location, budget, limit)
+
+        Note: Google Search grounding is automatically available for current info/general questions.
         
         Output JSON ONLY:
         {{

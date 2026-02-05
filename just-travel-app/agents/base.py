@@ -17,6 +17,7 @@ import json
 import logging
 import asyncio
 from google import genai
+from google.genai import types
 from typing import Optional, Dict, Any, List
 
 logger = logging.getLogger(__name__)
@@ -49,39 +50,68 @@ class BaseAgent:
         else:
             self.model_name = "gemini-3-flash-preview"
             
-        logger.info(f"Agent '{self.name}' initialized with model '{self.model_name}' ({model_type})")
+        # Default Config + Google Search Grounding
+        self.generation_config = {"temperature": 0.7, "max_output_tokens": 8192}
+
+        # Enable Google Search grounding for all agents
+        try:
+            self.grounding_tool = types.Tool(google_search=types.GoogleSearch())
+            logger.info(f"Agent {name} initialized with Google Search grounding enabled")
+        except Exception as e:
+            logger.warning(f"Failed to initialize Google Search tool: {e}")
+            self.grounding_tool = None
 
     async def generate_response(self, prompt: str, context: Optional[Dict] = None) -> str:
         """
-        Generate a response using the LLM.
-        
-        Args:
-            prompt: The specific instruction/prompt for the agent
-            context: Additional context to include (profile, previous thoughts)
-            
-        Returns:
-            str: The raw text response from the model
+        Generates a response from the LLM based on the prompt using the Google Gen AI SDK.
+        Includes retry logic for Rate Limits (429).
         """
-        try:
-            if not self.client:
-                return "Error: Client not initialized (Missing API Key)"
+        if not self.client:
+            return "Error: Client not initialized (Missing API Key)"
+            
+        # Construct final prompt with context if provided
+        final_prompt = self._construct_prompt(prompt, context)
 
-            # Construct the full prompt context
-            full_prompt = self._construct_prompt(prompt, context)
-            
-            # Run the synchronous SDK call in a thread to avoid blocking the event loop
-            response = await asyncio.to_thread(
-                self.client.models.generate_content,
-                model=self.model_name,
-                contents=full_prompt
-            )
-            
-            return response.text
-            
-        except Exception as e:
-            logger.error(f"Error generating response for {self.name}: {e}")
-            # Fallback or re-raise depending on strategy
-            return f"Error: {str(e)}"
+        retries = 0
+        max_retries = 3
+        base_delay = 5  # seconds
+
+        while retries <= max_retries:
+            try:
+                # Build config with Google Search grounding if available
+                config = dict(self.generation_config)
+                if self.grounding_tool:
+                    config = types.GenerateContentConfig(
+                        tools=[self.grounding_tool],
+                        temperature=config.get("temperature", 0.7),
+                        max_output_tokens=config.get("max_output_tokens", 8192)
+                    )
+
+                response = await asyncio.to_thread(
+                    self.client.models.generate_content,
+                    model=self.model_name,
+                    contents=final_prompt,
+                    config=config
+                )
+
+                return response.text
+                
+            except Exception as e:
+                # Check for Rate Limit / Resource Exhausted
+                error_str = str(e)
+                if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str:
+                    retries += 1
+                    if retries > max_retries:
+                        logger.error(f"Agent {self.name} failed after {max_retries} retries due to Rate Limits.")
+                        raise
+                    
+                    wait_time = base_delay * (2 ** (retries - 1)) # 5, 10, 20...
+                    logger.warning(f"Rate Limit hit for {self.name}. Retrying in {wait_time}s... (Attempt {retries}/{max_retries})")
+                    await asyncio.sleep(wait_time)
+                else:
+                    logger.error(f"Error generating response for {self.name}: {e}")
+                    return "" # Return empty string on non-transient errors to avoid crashing the whole flow
+        return ""
 
     def _construct_prompt(self, base_prompt: str, context: Optional[Dict]) -> str:
         """

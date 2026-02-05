@@ -74,9 +74,11 @@ class SocialTools:
     def get_trending_hashtags(self, destination: str, platform: str = "instagram", limit: int = 10) -> list:
         if not self._initialized:
              return self._get_mock_hashtags(destination, limit)
-        
-        # Real Apify logic would go here
-        return self._get_mock_hashtags(destination, limit)
+
+        results = self.search_platform(platform, [f"#{destination}", f"{destination} travel"], limit=limit)
+        if not results:
+            return self._get_mock_hashtags(destination, limit)
+        return [{"hashtag": f"#{destination}", "count": r.get("likes", 0)} for r in results[:limit]]
 
     def search_travel_content(self, location: str) -> list:
         return self.search_platform("tiktok", [f"{location} travel guide"], limit=5)

@@ -7,7 +7,6 @@ from unittest.mock import MagicMock, AsyncMock
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Mock google.genai BEFORE importing agents
-from unittest.mock import MagicMock
 sys.modules["google"] = MagicMock()
 sys.modules["google.genai"] = MagicMock()
 sys.modules["google.genai.types"] = MagicMock()

@@ -44,6 +44,8 @@ class ProfilerAgent(BaseAgent):
         super().__init__(name="profiler", description="Captures user preferences using LLM", model_type="flash")
         logger.info("ProfilerAgent initialized with LLM")
 
+    GREETINGS = {"hi", "hey", "hello", "hola", "yo", "sup", "what's up", "whats up", "good morning", "good evening"}
+
     async def async_process(self, query: str, context: Optional[dict] = None) -> dict:
         """
         Process a user query to extract profile information using LLM.
@@ -56,6 +58,16 @@ class ProfilerAgent(BaseAgent):
         for key, value in context.get("profile", {}).items():
             if hasattr(current_profile, key):
                 setattr(current_profile, key, value)
+
+        # Short-circuit: greetings need no LLM call
+        if query.strip().lower().rstrip("!?.") in self.GREETINGS:
+            return {
+                "agent": self.name,
+                "profile": current_profile.to_dict(),
+                "extracted_preferences": [],
+                "follow_up_questions": ["Hi there! Where would you like to travel? Tell me about your dream trip!"],
+                "status": "greeted"
+            }
 
         prompt = f"""
         Analyze the following user input and extract travel profile information.

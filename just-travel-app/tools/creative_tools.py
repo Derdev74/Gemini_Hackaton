@@ -2,8 +2,7 @@ import os
 import logging
 import asyncio
 import time
-from typing import Optional, Dict, List
-from datetime import datetime
+from typing import Optional
 from google import genai
 from google.genai import types
 
@@ -96,24 +95,21 @@ class CreativeTools:
         
         try:
             # 1. Prepare image input if provided
+            pil_image = None
             if image_path:
                 if image_path.startswith("/"):
-                    # e.g. /generated/foo.png -> .../frontend/public/generated/foo.png
-                    # or /uploads/bar.png -> .../frontend/public/uploads/bar.png
                     abs_image_path = os.path.join(self.output_dir_base, image_path.lstrip("/"))
                 else:
                     abs_image_path = image_path
-                
-                # Verify existence
+
                 if os.path.exists(abs_image_path):
                     from PIL import Image
                     pil_image = Image.open(abs_image_path)
                 else:
                     logger.warning(f"Image path not found: {abs_image_path}. Falling back to text-to-video.")
-                    image_path = None # Reset so we don't try to use it
 
             # 2. Call API (Long Running Operation)
-            if image_path and 'pil_image' in locals():
+            if pil_image:
                 operation = await asyncio.to_thread(
                     self.client.models.generate_videos,
                     model=self.video_model,
