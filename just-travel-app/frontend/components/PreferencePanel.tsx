@@ -57,13 +57,13 @@ export default function PreferencePanel({ value, onChange }: {
   }
 
   return (
-    <div className="card-brutal mb-4 border-glow-purple">
+    <div className="card-brutal mb-4 border-glow-orange">
       {/* Toggle Header */}
       <button
         onClick={() => setExpanded(!expanded)}
         className="w-full flex items-center justify-between text-left"
       >
-        <span className="font-mono font-bold text-sm text-brutal-purple uppercase tracking-wider">
+        <span className="font-mono font-bold text-sm text-brutal-orange uppercase tracking-wider">
           ⚙️ Travel Preferences
         </span>
         <span className="text-white/50 text-sm transition-transform" style={{ transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)' }}>
@@ -80,14 +80,14 @@ export default function PreferencePanel({ value, onChange }: {
             </span>
           )}
           {value.dietary.length > 0 && value.dietary.map(d => (
-            <span key={d} className="badge-brutal text-xs border-glow-purple text-brutal-purple">{d}</span>
+            <span key={d} className="badge-brutal text-xs border-glow-orange text-brutal-orange">{d}</span>
           ))}
           {value.tripType && (
-            <span className="badge-brutal text-xs border-glow-cyan text-brutal-blue">
+            <span className="badge-brutal text-xs border-glow-pink text-brutal-pink">
               {TRIP_TYPES.find(t => t.id === value.tripType)?.label}
             </span>
           )}
-          <span className="badge-brutal text-xs border-glow-yellow text-brutal-yellow">${value.budget}/day</span>
+          <span className="badge-brutal text-xs border-glow-orange text-brutal-orange">${value.budget}/day</span>
         </div>
       )}
 
@@ -104,7 +104,7 @@ export default function PreferencePanel({ value, onChange }: {
                   <button
                     key={c.id}
                     onClick={() => onChange({ ...value, companionType: c.id })}
-                    className={`px-2 py-2 font-mono text-xs font-bold border transition-all text-center
+                    className={`px-2 py-2 font-mono text-xs font-bold border transition-all text-center rounded-xl
                       ${active
                         ? `bg-black/60 ${c.color} border-current`
                         : 'bg-black/30 border-white/15 text-white/50 hover:border-white/30 hover:text-white'
@@ -127,9 +127,9 @@ export default function PreferencePanel({ value, onChange }: {
                   <button
                     key={opt.id}
                     onClick={() => toggleDiet(opt.id)}
-                    className={`px-3 py-1 font-mono text-xs font-bold uppercase border transition-all
+                    className={`px-3 py-1 font-mono text-xs font-bold uppercase border transition-all rounded-lg
                       ${active
-                        ? 'bg-brutal-purple/15 border-brutal-purple/50 text-brutal-purple'
+                        ? 'bg-brutal-orange/15 border-brutal-orange/50 text-brutal-orange'
                         : 'bg-black/40 border-white/15 text-white/50 hover:border-white/30 hover:text-white'
                       }`}
                   >
@@ -150,7 +150,7 @@ export default function PreferencePanel({ value, onChange }: {
                   <button
                     key={t.id}
                     onClick={() => onChange({ ...value, tripType: t.id })}
-                    className={`px-3 py-2 font-mono text-xs font-bold border transition-all text-left
+                    className={`px-3 py-2 font-mono text-xs font-bold border transition-all text-left rounded-xl
                       ${active
                         ? `bg-black/60 ${t.color} border-current`
                         : 'bg-black/30 border-white/15 text-white/50 hover:border-white/30 hover:text-white'
@@ -166,7 +166,7 @@ export default function PreferencePanel({ value, onChange }: {
           {/* ── Budget Slider ($/day) ── */}
           <div>
             <label className="block font-mono text-xs text-white/50 uppercase mb-2">
-              Budget — <span className="text-brutal-yellow font-bold text-sm">${value.budget}<span className="text-white/35 text-xs font-normal">/day</span></span>
+              Budget — <span className="text-brutal-orange font-bold text-sm">${value.budget}<span className="text-white/35 text-xs font-normal">/day</span></span>
             </label>
             <div className="relative">
               <input
@@ -178,8 +178,8 @@ export default function PreferencePanel({ value, onChange }: {
                 onChange={e => onChange({ ...value, budget: Number(e.target.value) })}
                 className="w-full h-2 appearance-none cursor-pointer"
                 style={{
-                  background: `linear-gradient(to right, #00D4FF 0%, #B967FF ${budgetFillPercent(value.budget)}%, rgba(255,255,255,0.1) ${budgetFillPercent(value.budget)}%, rgba(255,255,255,0.1) 100%)`,
-                  borderRadius: '4px',
+                  background: `linear-gradient(to right, #FF9F43 0%, #FF6B9D ${budgetFillPercent(value.budget)}%, rgba(255,255,255,0.1) ${budgetFillPercent(value.budget)}%, rgba(255,255,255,0.1) 100%)`,
+                  borderRadius: '8px',
                 }}
               />
               {/* Tick labels */}
@@ -187,7 +187,7 @@ export default function PreferencePanel({ value, onChange }: {
                 {[50, 250, 500, 750, 1000].map(tick => (
                   <span
                     key={tick}
-                    className={`text-[10px] font-mono ${value.budget === tick ? 'text-brutal-yellow' : 'text-white/30'}`}
+                    className={`text-[10px] font-mono ${value.budget === tick ? 'text-brutal-orange' : 'text-white/30'}`}
                   >
                     ${tick}
                   </span>

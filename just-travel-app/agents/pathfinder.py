@@ -1,11 +1,12 @@
 import logging
 import asyncio
-from typing import Optional
+from typing import Optional, Dict, Any
 from agents.base import BaseAgent
 
 from tools.cypher_tools import CypherTools
 from tools.transport_tools import TransportTools
 from tools.maps_tools import MapsTools
+from tools.amadeus_tools import find_cheapest_dates, flight_price_analysis
 
 logger = logging.getLogger(__name__)
 
@@ -76,7 +77,21 @@ class PathfinderAgent(BaseAgent):
             if tool_name == "plan_door_to_door":
                 results = await self._execute_door_to_door(args)
             elif tool_name == "search_flights":
-                results = await asyncio.to_thread(self.transport_tools.search_flights, **args)
+                # Get base flight results
+                flight_results = await asyncio.to_thread(self.transport_tools.search_flights, **args)
+
+                # Enrich with Amadeus intelligence for Optimizer
+                amadeus_intel = await self._enrich_with_amadeus_intelligence(
+                    origin=args.get("origin", ""),
+                    destination=args.get("destination", ""),
+                    departure_date=args.get("departure_date")
+                )
+
+                # Combine results
+                results = {
+                    "flights": flight_results,
+                    **amadeus_intel
+                } if isinstance(flight_results, list) else flight_results
             elif tool_name == "find_by_category":
                 results = await asyncio.to_thread(self.cypher_tools.find_by_category, **args)
             elif tool_name == "find_destinations_in_region":
@@ -126,3 +141,43 @@ class PathfinderAgent(BaseAgent):
                 {"type": "ground_transfer_end", "details": directions_end}
             ]
         }]
+
+    async def _enrich_with_amadeus_intelligence(
+        self,
+        origin: str,
+        destination: str,
+        departure_date: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Add Amadeus flight intelligence for Optimizer decision-making.
+
+        Returns dict with:
+        - cheapest_dates: Alternative dates with better prices
+        - price_analysis: Confidence scoring (Great Deal / Fair / High)
+        """
+        try:
+            # Run both Amadeus calls in parallel for speed
+            cheapest, analysis = await asyncio.gather(
+                find_cheapest_dates(origin, destination, departure_date),
+                flight_price_analysis(origin, destination, departure_date or "") if departure_date else asyncio.sleep(0),
+                return_exceptions=True
+            )
+
+            # Handle exceptions gracefully
+            if isinstance(cheapest, Exception):
+                logger.warning(f"Cheapest dates failed: {cheapest}")
+                cheapest = {}
+            if isinstance(analysis, Exception):
+                logger.warning(f"Price analysis failed: {analysis}")
+                analysis = {}
+
+            return {
+                "amadeus_intelligence": {
+                    "cheapest_dates": cheapest,
+                    "price_analysis": analysis if departure_date else None,
+                    "source": "amadeus_api"
+                }
+            }
+        except Exception as e:
+            logger.error(f"Amadeus enrichment failed: {e}")
+            return {"amadeus_intelligence": None}

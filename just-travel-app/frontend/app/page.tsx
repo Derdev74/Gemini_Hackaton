@@ -56,6 +56,7 @@ interface AgentResponse {
   profile?: unknown
   data?: { itinerary?: any }
   creative?: { poster_url?: string; video_url?: string }
+  type?: 'optimization_update' | 'standard_chat'  // Chatbot response types
 }
 
 /**
@@ -98,6 +99,8 @@ Just type your preferences and I'll create a personalized travel plan for you!`,
   const [panelPrefs, setPanelPrefs] = useState<Preferences>({
     dietary: [], budget: 200, tripType: '', companionType: '', startDate: '', endDate: ''
   })
+  const [notification, setNotification] = useState<string>('')  // For chatbot update notifications
+  const [latestItinerary, setLatestItinerary] = useState<any>(null)  // Track latest itinerary for context
 
   // Sync Google Session with Backend
   useEffect(() => {
@@ -287,6 +290,7 @@ Just type your preferences and I'll create a personalized travel plan for you!`,
             travel_dates: panelPrefs.startDate && panelPrefs.endDate
               ? { start: panelPrefs.startDate, end: panelPrefs.endDate }
               : undefined,
+            existing_itinerary: latestItinerary || undefined,  // Pass context for chatbot
           },
           uploaded_file: uploadedUrl || undefined
         })
@@ -295,6 +299,17 @@ Just type your preferences and I'll create a personalized travel plan for you!`,
       if (!res.ok) throw new Error('API request failed')
 
       const response: AgentResponse = await res.json()
+
+      // Handle chatbot optimization updates
+      if (response.type === 'optimization_update') {
+        setNotification('✅ Your itinerary has been updated based on your request!')
+        setTimeout(() => setNotification(''), 5000)  // Clear notification after 5s
+      }
+
+      // Track latest itinerary for context in follow-up messages
+      if (response.data?.itinerary) {
+        setLatestItinerary(response.data.itinerary)
+      }
 
       const assistantMessage: Message = {
         id: `assistant-${Date.now()}`,
@@ -371,7 +386,7 @@ Just type your preferences and I'll create a personalized travel plan for you!`,
       <section id="features" className="py-16 md:py-24">
         <div className="container mx-auto px-4">
           <h2 className="text-4xl font-mono font-bold text-center mb-12">
-            <span className="bg-black/60 backdrop-blur-sm px-4 py-2 border border-brutal-blue/40 text-brutal-blue" style={{boxShadow:'0 0 16px rgba(0,212,255,0.2)'}}>
+            <span className="bg-black/60 backdrop-blur-sm px-4 py-2 border border-brutal-orange/40 text-brutal-orange" style={{boxShadow:'0 0 16px rgba(0,212,255,0.2)'}}>
               FEATURES
             </span>
           </h2>
@@ -398,7 +413,7 @@ Just type your preferences and I'll create a personalized travel plan for you!`,
             </div>
 
             {/* Feature 3 */}
-            <div className="card-brutal border-glow-purple rotate-brutal hover:rotate-0 transition-transform">
+            <div className="card-brutal border-glow-pink rotate-brutal hover:rotate-0 transition-transform">
               <div className="text-4xl mb-4">🗺️</div>
               <h3 className="text-xl font-mono font-bold mb-2 text-brutal-purple">Smart Routing</h3>
               <p className="text-white/70">
@@ -428,9 +443,9 @@ Just type your preferences and I'll create a personalized travel plan for you!`,
             </div>
 
             {/* Feature 6 */}
-            <div className="card-brutal border-glow-cyan rotate-brutal-reverse hover:rotate-0 transition-transform">
+            <div className="card-brutal border-glow-orange rotate-brutal-reverse hover:rotate-0 transition-transform">
               <div className="text-4xl mb-4">📅</div>
-              <h3 className="text-xl font-mono font-bold mb-2 text-brutal-blue">Dynamic Planning</h3>
+              <h3 className="text-xl font-mono font-bold mb-2 text-brutal-orange">Dynamic Planning</h3>
               <p className="text-white/70">
                 Generates day-by-day itineraries that adapt to weather,
                 crowds, and your energy levels.
@@ -452,6 +467,13 @@ Just type your preferences and I'll create a personalized travel plan for you!`,
           {/* Chat Interface */}
           <div className="max-w-4xl mx-auto">
             <PreferencePanel value={panelPrefs} onChange={setPanelPrefs} />
+
+            {/* Notification Banner */}
+            {notification && (
+              <div className="mb-4 p-4 rounded-2xl bg-brutal-green/10 border border-brutal-green/30 backdrop-blur-xl animate-slide-up" style={{boxShadow: '0 0 12px rgba(0,255,133,0.2)'}}>
+                <p className="font-mono text-sm text-white text-center">{notification}</p>
+              </div>
+            )}
 
             <div className="card-brutal p-0 overflow-hidden">
               {/* Chat Header */}
@@ -493,7 +515,7 @@ Just type your preferences and I'll create a personalized travel plan for you!`,
                   ) : (
                     <button
                       onClick={() => setAuthModalOpen(true)}
-                      className="btn-brutal px-2 py-1 text-xs border-glow-cyan"
+                      className="btn-brutal px-2 py-1 text-xs border-glow-orange"
                     >
                       LOGIN
                     </button>
@@ -520,7 +542,7 @@ Just type your preferences and I'll create a personalized travel plan for you!`,
                       }
                     >
                       {message.agentSource && message.role === 'assistant' && (
-                        <div className="badge-brutal border-glow-cyan mb-2 text-xs text-brutal-blue">
+                        <div className="badge-brutal border-glow-orange mb-2 text-xs text-brutal-orange">
                           {message.agentSource}
                         </div>
                       )}
@@ -689,11 +711,11 @@ Just type your preferences and I'll create a personalized travel plan for you!`,
 
               {/* Step 3 */}
               <div className="flex gap-6 items-start">
-                <div className="w-16 h-16 bg-black/60 backdrop-blur-sm border border-brutal-blue/40 flex items-center justify-center font-mono font-bold text-2xl shrink-0 text-brutal-blue" style={{boxShadow:'0 0 12px rgba(0,212,255,0.25)'}}>
+                <div className="w-16 h-16 bg-black/60 backdrop-blur-sm border border-brutal-orange/40 flex items-center justify-center font-mono font-bold text-2xl shrink-0 text-brutal-orange" style={{boxShadow:'0 0 12px rgba(0,212,255,0.25)'}}>
                   3
                 </div>
                 <div className="card-brutal flex-1">
-                  <h3 className="text-xl font-mono font-bold mb-2 text-brutal-blue">Get Your Perfect Plan</h3>
+                  <h3 className="text-xl font-mono font-bold mb-2 text-brutal-orange">Get Your Perfect Plan</h3>
                   <p className="text-white/70">
                     Receive a personalized, day-by-day itinerary optimized for
                     your preferences, with all dietary needs respected.
@@ -776,7 +798,7 @@ Just type your preferences and I'll create a personalized travel plan for you!`,
 
             <button
               onClick={() => signIn('google')}
-              className="btn-brutal w-full flex items-center justify-center gap-2 border-glow-cyan"
+              className="btn-brutal w-full flex items-center justify-center gap-2 border-glow-orange"
             >
               <svg className="w-5 h-5" viewBox="0 0 24 24">
                 <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />

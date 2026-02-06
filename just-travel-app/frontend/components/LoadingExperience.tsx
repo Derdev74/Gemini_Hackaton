@@ -3,8 +3,8 @@
 import { useState, useEffect, Fragment } from 'react'
 
 const STAGES = [
-  { id: 'profiler',  label: 'Profiler',   emoji: '👤', enterAt: 0,    color: 'text-brutal-yellow',  border: 'border-brutal-yellow/50', glow: 'rgba(255,225,53,0.3)' },
-  { id: 'parallel',  label: 'Exploring', emoji: '🔍', enterAt: 1500, color: 'text-brutal-blue',    border: 'border-brutal-blue/50',   glow: 'rgba(0,212,255,0.3)' },
+  { id: 'profiler',  label: 'Profiler',   emoji: '👤', enterAt: 0,    color: 'text-brutal-orange',  border: 'border-brutal-orange/50', glow: 'rgba(255,159,67,0.3)' },
+  { id: 'parallel',  label: 'Exploring', emoji: '🔍', enterAt: 1500, color: 'text-brutal-orange',    border: 'border-brutal-orange/50',   glow: 'rgba(255,159,67,0.3)' },
   { id: 'optimizer', label: 'Optimizing',emoji: '⚡', enterAt: 4000, color: 'text-brutal-purple',  border: 'border-brutal-purple/50', glow: 'rgba(185,103,255,0.3)' },
   { id: 'creative',  label: 'Creating',  emoji: '🎨', enterAt: 6500, color: 'text-brutal-pink',    border: 'border-brutal-pink/50',   glow: 'rgba(255,107,157,0.3)' },
 ]

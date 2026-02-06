@@ -12,6 +12,7 @@
 
 import type { Metadata } from 'next'
 import NavHeader from '../components/NavHeader'
+import MeshBackground from '../components/MeshBackground'
 import { Providers } from './providers'
 import './globals.css'
 
@@ -43,6 +44,7 @@ export default function RootLayout({
   return (
     <html lang="en" className="scroll-smooth">
       <body className="min-h-screen flex flex-col">
+        <MeshBackground />
         <Providers>
           <NavHeader />
 
@@ -58,7 +60,7 @@ export default function RootLayout({
                 {/* Brand column */}
                 <div>
                   <h2 className="text-xl font-mono font-bold mb-4">
-                    <span className="text-brutal-blue">JUST</span> TRAVEL
+                    <span className="text-brutal-orange">JUST</span> TRAVEL
                   </h2>
                   <p className="text-sm text-white/60">
                     AI-powered travel planning that adapts to your unique preferences
@@ -68,22 +70,22 @@ export default function RootLayout({
 
                 {/* Quick links */}
                 <div>
-                  <h3 className="text-lg font-mono font-bold mb-4 text-brutal-blue">
+                  <h3 className="text-lg font-mono font-bold mb-4 text-brutal-orange">
                     Quick Links
                   </h3>
                   <ul className="space-y-2 text-sm">
                     <li>
-                      <a href="#" className="text-white/60 hover:text-brutal-blue no-underline transition-colors">
+                      <a href="#" className="text-white/60 hover:text-brutal-orange no-underline transition-colors">
                         Plan a Trip
                       </a>
                     </li>
                     <li>
-                      <a href="#" className="text-white/60 hover:text-brutal-blue no-underline transition-colors">
+                      <a href="#" className="text-white/60 hover:text-brutal-orange no-underline transition-colors">
                         Browse Destinations
                       </a>
                     </li>
                     <li>
-                      <a href="#" className="text-white/60 hover:text-brutal-blue no-underline transition-colors">
+                      <a href="#" className="text-white/60 hover:text-brutal-orange no-underline transition-colors">
                         Travel Tips
                       </a>
                     </li>
@@ -92,7 +94,7 @@ export default function RootLayout({
 
                 {/* Contact */}
                 <div>
-                  <h3 className="text-lg font-mono font-bold mb-4 text-brutal-blue">
+                  <h3 className="text-lg font-mono font-bold mb-4 text-brutal-orange">
                     Connect
                   </h3>
                   <p className="text-sm text-white/60 mb-2">

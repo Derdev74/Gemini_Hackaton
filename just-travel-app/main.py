@@ -37,6 +37,7 @@ from agents.trend_spotter import TrendSpotterAgent
 from agents.concierge import ConciergeAgent
 from agents.optimizer import OptimizerAgent
 from agents.creative_director import CreativeDirectorAgent
+from agents.chatbot import ChatbotAgent
 
 # Import DB and Auth
 from database import init_db, get_session, User, Itinerary
@@ -210,7 +211,7 @@ class AntigravityAgentManager:
     """
     def __init__(self):
         logger.info("Initializing Antigravity Agent Manager...")
-        
+
         # Initialize Workers
         self.profiler = ProfilerAgent()
         self.pathfinder = PathfinderAgent()
@@ -218,6 +219,7 @@ class AntigravityAgentManager:
         self.concierge = ConciergeAgent()
         self.optimizer = OptimizerAgent()
         self.creative_director = CreativeDirectorAgent()
+        self.chatbot = ChatbotAgent()
 
         logger.info("Agents armed and ready.")
 
@@ -499,18 +501,64 @@ async def health_check():
 async def chat_endpoint(
     request: Request,
     chat_req: ChatRequest,
-    user: Optional[User] = Depends(get_optional_user)
+    user: Optional[User] = Depends(get_optional_user),
+    session: AsyncSession = Depends(get_session)
 ):
     """
     Main chat endpoint. Works for guests and authenticated users.
+    Hybrid approach: First message runs full pipeline, follow-ups use Chatbot.
     """
     try:
         # Inject uploaded_file into context if present
         if chat_req.uploaded_file:
             chat_req.preferences["uploaded_file"] = chat_req.uploaded_file
 
-        response = await agent_manager.run_workflow(chat_req.message, chat_req.preferences)
-        return response
+        # Detect if user has existing itinerary (for hybrid routing)
+        has_existing_itinerary = False
+
+        # Check 1: Does the conversation context contain an itinerary?
+        if chat_req.preferences.get("existing_itinerary") or chat_req.preferences.get("itinerary"):
+            has_existing_itinerary = True
+            logger.info("Detected existing itinerary in context - routing to Chatbot")
+
+        # Check 2: For authenticated users, check database for saved itineraries
+        elif user:
+            statement = select(Itinerary).where(Itinerary.user_id == user.id).limit(1)
+            result = await session.execute(statement)
+            if result.scalars().first():
+                has_existing_itinerary = True
+                logger.info(f"User {user.email} has saved itineraries - routing to Chatbot")
+
+        # Route based on itinerary existence (Hybrid Approach)
+        if has_existing_itinerary:
+            # User has itinerary → use Chatbot for conversational refinement
+            chatbot_response = await agent_manager.chatbot.async_process(
+                user_query=chat_req.message,
+                context=chat_req.preferences
+            )
+
+            # Convert chatbot response format to AgentResponse format
+            if chatbot_response.get("type") == "optimization_update":
+                return AgentResponse(
+                    agent="chatbot",
+                    status="success",
+                    message=chatbot_response.get("text", ""),
+                    data=chatbot_response.get("data"),
+                    profile=chat_req.preferences.get("profile")
+                )
+            else:  # standard_chat
+                return AgentResponse(
+                    agent="chatbot",
+                    status="success",
+                    message=chatbot_response.get("text", ""),
+                    profile=chat_req.preferences.get("profile")
+                )
+        else:
+            # First time or no itinerary → run full 6-agent pipeline
+            logger.info("No existing itinerary detected - running full pipeline")
+            response = await agent_manager.run_workflow(chat_req.message, chat_req.preferences)
+            return response
+
     except Exception as e:
         logger.error(f"Workflow failed: {e}")
         raise HTTPException(status_code=500, detail="An internal error occurred while processing your request.")

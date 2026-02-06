@@ -38,6 +38,16 @@ class OptimizerAgent(BaseAgent):
         accommodations = context.get("accommodations", [])
         trends = context.get("trends", [])
 
+        # Extract Amadeus intelligence if Pathfinder provided it
+        amadeus_intel = None
+        if isinstance(destinations, dict) and "amadeus_intelligence" in destinations:
+            amadeus_intel = destinations.get("amadeus_intelligence")
+        elif isinstance(destinations, list):
+            for dest in destinations:
+                if isinstance(dest, dict) and "amadeus_intelligence" in dest:
+                    amadeus_intel = dest.get("amadeus_intelligence")
+                    break
+
         # Default start date if missing
         start_date_str = datetime.now().strftime("%Y-%m-%d")
 
@@ -78,6 +88,8 @@ class OptimizerAgent(BaseAgent):
         - Viral Trends: {self._summarize_list(trends, 'title')}
 
         {weather_section}
+
+        {self._format_flight_intelligence(amadeus_intel)}
 
         Constraints:
         - Create a valid daily schedule.
@@ -151,3 +163,43 @@ class OptimizerAgent(BaseAgent):
                 current += timedelta(days=1)
         except Exception:
             pass
+
+    def _format_flight_intelligence(self, amadeus_intel: Optional[dict]) -> str:
+        """
+        Format Amadeus flight intelligence for prompt injection.
+
+        This gives the LLM smart money-saving insights to include in suggestions.
+        """
+        if not amadeus_intel:
+            return ""
+
+        sections = []
+
+        # Cheapest dates analysis
+        cheapest = amadeus_intel.get("cheapest_dates", {})
+        if cheapest and cheapest.get("cheapest_date"):
+            savings = cheapest.get("savings_vs_target", 0)
+            if savings and savings > 50:  # Only show if meaningful savings
+                sections.append(
+                    f"💰 FLIGHT SAVINGS OPPORTUNITY: Shifting dates to {cheapest['cheapest_date']} "
+                    f"could save ${savings:.0f} on flights."
+                )
+
+        # Price confidence analysis
+        analysis = amadeus_intel.get("price_analysis", {})
+        if analysis and analysis.get("confidence"):
+            confidence = analysis["confidence"]
+            recommendation = analysis.get("recommendation", "")
+            if confidence == "Great Deal":
+                sections.append(
+                    f"✅ FLIGHT DEAL ALERT: {recommendation}"
+                )
+            elif confidence == "High Price":
+                sections.append(
+                    f"⚠️  FLIGHT PRICING NOTE: {recommendation}"
+                )
+
+        if not sections:
+            return ""
+
+        return "Flight Intelligence (for your money-saving suggestions):\n" + "\n".join(sections)

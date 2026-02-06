@@ -52,8 +52,8 @@ export function ItineraryView({ itinerary }: ItineraryProps) {
                     TRIP SUMMARY
                 </h3>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-                    <div className="p-2 border border-brutal-blue/40 bg-black/40 text-center" style={{boxShadow:'0 0 8px rgba(0,212,255,0.12)'}}>
-                        <span className="block text-2xl font-bold text-brutal-blue">{totalDays}</span>
+                    <div className="p-2 border border-brutal-orange/40 bg-black/40 text-center" style={{boxShadow:'0 0 8px rgba(255,159,67,0.12)'}}>
+                        <span className="block text-2xl font-bold text-brutal-orange">{totalDays}</span>
                         <span className="text-xs font-mono uppercase text-white/50">Days</span>
                     </div>
                     <div className="p-2 border border-brutal-green/40 bg-black/40 text-center" style={{boxShadow:'0 0 8px rgba(0,255,133,0.12)'}}>
@@ -80,7 +80,7 @@ export function ItineraryView({ itinerary }: ItineraryProps) {
                         className={`
               flex-shrink-0 px-4 py-2 font-mono font-bold border transition-all
               ${activeDay === day.day_number
-                                ? 'bg-black/80 text-brutal-blue border-glow-cyan'
+                                ? 'bg-black/80 text-brutal-orange border-glow-orange'
                                 : 'bg-black/30 border-white/15 text-white/60 hover:border-white/30 hover:text-white'}
             `}
                     >
@@ -118,7 +118,7 @@ export function ItineraryView({ itinerary }: ItineraryProps) {
                                 <div
                                     className={`w-4 h-4 rounded-full z-10
                   ${slot.activity_type === 'meal' ? 'bg-brutal-orange' :
-                                        slot.activity_type === 'transport' ? 'bg-gray-500' : 'bg-brutal-blue'}`}
+                                        slot.activity_type === 'transport' ? 'bg-gray-500' : 'bg-brutal-orange'}`}
                                     style={{boxShadow: slot.activity_type === 'meal' ? '0 0 6px #FF9F43' : slot.activity_type === 'transport' ? '0 0 4px #6B7280' : '0 0 6px #00D4FF'}}
                                 />
                                 <div className="w-px h-full bg-white absolute top-4 opacity-15 group-last:hidden" />
