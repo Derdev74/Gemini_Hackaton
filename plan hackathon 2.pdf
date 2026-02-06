@@ -1,0 +1,52 @@
+This optimized plan leverages the cutting-edge **Gemini 3** ecosystem, specifically designed for "acting and coding". You will use **Nano Banana Pro** (Gemini 3 Pro Image) for professional-grade visual assets and **Veo 3.1** (integrated with Gemini 3) to generate your high-fidelity video previews.
+
+---
+
+## 🏗️ "Just Travel" Optimized Architecture
+
+By using **Google Antigravity**, you move from writing code to orchestrating a taskforce of agents that build the app autonomously.
+
+### 1. The Creative Engine (Nano Banana Pro & Veo 3.1)
+
+* **Nano Banana Pro:** Generates "studio-quality" posters, menus, and UI mockups with advanced text rendering. It handles "local edits" to update travel posters with specific destination text.
+* **Veo 3.1:** Creates 8-second, 4K video previews of your itinerary. It supports "image-to-video" where you use Nano Banana's posters as reference frames to ensure visual consistency.
+
+### 2. The Logic & Tooling (Gemini 3 Pro & ADK)
+
+* **Reasoning:** Use `thinking_level="high"` for the **Navigator Agent** to solve complex pathfinding in Neo4j and `thinking_level="low"` for the **Chatbot** to ensure instant responses.
+* **Thought Signatures:** Your agents will pass "Thought Signatures" between steps to maintain reasoning consistency across the entire planning flow.
+
+---
+
+## 📝 Antigravity To-Do List (Mission Control)
+
+Copy these tasks into the **Antigravity Agent Manager** sidebar to have your agents execute them.
+
+### Phase 1: Foundation & "Vibe Coding"
+
+* [ ] **Task:** Initialize the project using the **Build** feature. Prompt: *"Create a Next.js travel app skeleton with a neo-brutalist theme. Use Nano Banana Pro to generate high-fidelity background assets for the landing page."*.
+* [ ] **Task:** Connect **Neo4j**. Direct the agent to write a `cypher_tools.py` module using Gemini 3's advanced coding capabilities to handle multi-modal transit queries.
+* [ ] **Task:** Set up **ADK Interactions API**. This offloads state management to the server, allowing your agents to handle long-running tasks like "Deep Researching" local blogs without timing out.
+
+### Phase 2: Agentic Workflow & Tooling
+
+* [ ] **Task: The Pathfinder (Gemini 3 Pro):** Configure this agent to use **Search Grounding** to verify real-time flight data and match it against the Neo4j graph.
+* [ ] **Task: The Concierge (Gemini 3 Flash):** Task the agent to build a filter that cross-references restaurant menus (via Google Places API) with strict dietary tags (Halal, Vegan, Kosher).
+
+### Phase 3: High-Fidelity Creative (The Video Ad)
+
+* [ ] **Task: Visual Assets:** Use **Nano Banana Pro** to generate "hero images" for the top 3 spots in the user's itinerary. Ensure "Character Consistency" if the user uploads a selfie to be included in the ads.
+* [ ] **Task: Video Preview:** Implement a service using **Veo 3.1**. Prompt: *"Generate an 8-second cinematic 4K video preview. Use the Nano Banana posters of the user's chosen hotel and the 'hidden gem' as reference frames. Add upbeat, travel-themed audio."*.
+
+### Phase 4: Refinement & Deploy
+
+* [ ] **Task: The Explainability Chatbot:** Add a sidebar chat powered by Gemini 3 that uses **Thought Signatures** to explain why the itinerary changed after a user edit.
+* [ ] **Task: Single-Click Deploy:** Use the Antigravity "Deploy" artifact to push the backend to **Google Cloud Run** and the frontend to **Firebase Hosting**.
+
+---
+
+## 💡 Antigravity Expert Tip
+
+Use the **Agent Side Panel** to ask:
+
+> *"@agent, look at 'why use this and not the other thing.pdf' and update the Navigator Agent's system instructions to prioritize Neo4j's multi-hop query speed for all routing requests."*.
