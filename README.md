@@ -7,7 +7,7 @@
 
 > An intelligent travel planning Progressive Web App powered by 6 AI agents. Plan your perfect trip with budget optimization, weather intelligence, and offline access.
 
-![Just Travel](https://img.shields.io/badge/Next.js-14-black?logo=next.js) ![FastAPI](https://img.shields.io/badge/FastAPI-Python-green?logo=fastapi) ![Google Gemini](https://img.shields.io/badge/AI-Google%20Gemini-orange)
+![Just Travel](https://img.shields.io/badge/Next.js-14-black?logo=next.js) ![FastAPI](https://img.shields.io/badge/FastAPI-Python-green?logo=fastapi) ![Google Gemini](https://img.shields.io/badge/AI-Gemini%203%20Pro%20%2B%20Flash-orange)
 
 ---
 
@@ -245,7 +245,7 @@ pytest tests/ -v
 - **Language:** Python 3.12
 - **Database:** SQLite (async with SQLModel)
 - **Cache:** Redis 7
-- **AI:** Google Gemini 2.0
+- **AI:** Google Gemini 3 (Pro + Flash)
 - **Auth:** JWT (python-jose) + bcrypt
 
 ### Infrastructure
@@ -468,7 +468,17 @@ docker-compose down -v && docker-compose up --build
 - Polls via `/api/media-status/{task_id}`
 
 ### Agent Communication
-- All agents use **Google Gemini 2.0 Flash**
+- **Complex tasks use Gemini 3 Pro Preview:**
+  - Chatbot (conversational refinement)
+  - Concierge (activity curation & personalization)
+  - Optimizer (budget/weather/logistics optimization)
+  - CreativeDirector (poster & video generation)
+
+- **Simple tasks use Gemini 3 Flash Preview:**
+  - Profiler (preference extraction)
+  - Pathfinder (route finding)
+  - TrendSpotter (social trends analysis)
+
 - Built-in **web search grounding** for real-time data
 - Structured output with **response schemas**
 - Error handling with **graceful fallbacks**
@@ -750,7 +760,7 @@ This project is provided as-is for educational and demonstration purposes.
 
 <div align="center">
 
-**Built with ❤️ using Next.js 14, FastAPI, and Google Gemini**
+**Built with ❤️ using Next.js 14, FastAPI, and Google Gemini 3**
 
 [Get Started](#-quick-start) • [Documentation](#-documentation) • [Deploy](#-deployment)
 

@@ -15,7 +15,7 @@ class ConciergeAgent(BaseAgent):
     """
 
     def __init__(self):
-        super().__init__(name="concierge", description="Recommends services using LLM + Maps", model_type="flash")
+        super().__init__(name="concierge", description="Recommends services using LLM + Maps", model_type="pro")
         self.maps_tools = MapsTools()
         self.booking_tools = BookingTools()
         logger.info("ConciergeAgent initialized with LLM and Booking Tools")
