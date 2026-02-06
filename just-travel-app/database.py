@@ -44,9 +44,15 @@ class Itinerary(SQLModel, table=True):
     summary: str
     
     # Fix: Use default_factory=dict for mutable defaults
-    data: Dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON)) 
+    data: Dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
     creative_assets: Dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
-    
+
+    # Phase 3: Background Task Media Generation
+    poster_url: Optional[str] = None
+    video_url: Optional[str] = None
+    media_status: str = "pending"  # pending | generating | completed | failed
+    media_task_id: Optional[str] = None
+
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     
     # Relationships

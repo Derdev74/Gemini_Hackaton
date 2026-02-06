@@ -10,11 +10,24 @@
  * - Common UI elements (header, footer if needed)
  */
 
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import NavHeader from '../components/NavHeader'
 import MeshBackground from '../components/MeshBackground'
+import OfflineBanner from '../components/OfflineBanner'
+import InstallPrompt from '../components/InstallPrompt'
 import { Providers } from './providers'
 import './globals.css'
+
+/**
+ * Viewport configuration for PWA
+ */
+export const viewport: Viewport = {
+  themeColor: '#FF9F43',
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 5,
+  userScalable: true,
+}
 
 /**
  * Metadata configuration for SEO and browser display
@@ -24,6 +37,21 @@ export const metadata: Metadata = {
   description: 'Plan your perfect trip with AI-powered recommendations for destinations, accommodations, and experiences tailored to your preferences.',
   keywords: ['travel', 'AI', 'trip planning', 'itinerary', 'vacation', 'travel agent'],
   authors: [{ name: 'Just Travel Team' }],
+  manifest: '/manifest.json',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'black-translucent',
+    title: 'Just Travel',
+  },
+  icons: {
+    icon: [
+      { url: '/icons/icon-192x192.png', sizes: '192x192', type: 'image/png' },
+      { url: '/icons/icon-512x512.png', sizes: '512x512', type: 'image/png' },
+    ],
+    apple: [
+      { url: '/icons/icon-192x192.png', sizes: '192x192', type: 'image/png' },
+    ],
+  },
   openGraph: {
     title: 'Just Travel - AI-Powered Travel Planning',
     description: 'Your personal AI travel assistant for the perfect trip',
@@ -46,6 +74,8 @@ export default function RootLayout({
       <body className="min-h-screen flex flex-col">
         <MeshBackground />
         <Providers>
+          <OfflineBanner />
+          <InstallPrompt />
           <NavHeader />
 
           {/* Main content area */}

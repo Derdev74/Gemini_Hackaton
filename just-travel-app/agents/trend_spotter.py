@@ -42,11 +42,18 @@ class TrendSpotterAgent(BaseAgent):
         while attempt < max_retries:
             attempt += 1
             logger.info(f"TrendSpotter Attempt {attempt}/{max_retries} for location: {current_location}")
-            
+
             # 1. Fetch Raw Data
-            raw_trends, formatted_posts = await self._fetch_social_data(current_location)
+            raw_trends, formatted_posts, is_mock = await self._fetch_social_data(current_location)
             raw_count = len(formatted_posts)
-            
+
+            # Phase 2 optimization: Skip retries if mock data detected
+            if is_mock:
+                logger.warning(f"⏭️  Mock data detected for {current_location}, skipping retries")
+                # Still synthesize trends from mock data (better than nothing)
+                final_trends = await self._synthesize_trends(current_location, raw_trends, formatted_posts)
+                break
+
             # 2. Validate Data Presence
             if raw_count == 0:
                 if attempt < max_retries:
@@ -74,15 +81,23 @@ class TrendSpotterAgent(BaseAgent):
         }
 
     async def _fetch_social_data(self, location: str):
-        """Helper to fetch data from social tools"""
+        """Helper to fetch data from social tools. Returns (trends, posts, is_mock)"""
         try:
             # We start with a broad search based on the query
             raw_trends = self.social_tools.get_trending_hashtags(location)
             formatted_posts = self.social_tools.search_travel_content(location)
-            return raw_trends, formatted_posts
+
+            # Phase 2 optimization: Detect mock data to skip retries
+            # Mock data contains "MOCK" marker in content
+            is_mock = (
+                any("MOCK" in str(t).upper() for t in raw_trends[:3] if t) or
+                any("MOCK" in str(p).upper() for p in formatted_posts[:3] if p)
+            )
+
+            return raw_trends, formatted_posts, is_mock
         except Exception as e:
             logger.error(f"Error fetching social data: {e}")
-            return [], []
+            return [], [], False
 
     async def _generate_broadening_query(self, location: str) -> str:
         """Uses LLM to generate a broader search term if the specific one fails."""

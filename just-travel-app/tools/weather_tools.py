@@ -13,6 +13,7 @@ Example Usage:
 import os
 import logging
 from typing import Optional
+from cachetools import TTLCache
 
 try:
     import requests
@@ -22,6 +23,9 @@ except ImportError:
     REQUESTS_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
+
+# Weather forecast cache (15 min TTL, max 500 cities)
+weather_cache = TTLCache(maxsize=500, ttl=900)
 
 # Activity categories that are weather-sensitive
 OUTDOOR_ACTIVITY_TYPES = {"hiking", "swimming", "cycling", "outdoor", "beach", "camping", "skiing"}
@@ -65,8 +69,16 @@ class WeatherTools:
         """
         days = min(max(days, 1), 5)
 
+        # Check cache first (Phase 1 optimization)
+        cache_key = f"forecast:{city.lower()}:{days}"
+        if cache_key in weather_cache:
+            logger.info(f"⚡ Weather cache HIT for {city} ({days} days)")
+            return weather_cache[cache_key]
+
         if not self._connected:
-            return self._mock_forecast(city, days)
+            result = self._mock_forecast(city, days)
+            weather_cache[cache_key] = result
+            return result
 
         try:
             # 5-day / 3-hour endpoint covers up to 5 days
@@ -82,11 +94,18 @@ class WeatherTools:
             )
             resp.raise_for_status()
             data = resp.json()
-            return self._parse_forecast(data, days)
+            result = self._parse_forecast(data, days)
+
+            # Cache successful result (Phase 1 optimization)
+            weather_cache[cache_key] = result
+            logger.info(f"💾 Cached weather for {city} ({days} days)")
+            return result
 
         except Exception as e:
             logger.warning(f"OpenWeatherMap request failed ({city}): {e}")
-            return self._mock_forecast(city, days)
+            result = self._mock_forecast(city, days)
+            weather_cache[cache_key] = result  # Cache mock too
+            return result
 
     def get_current(self, city: str) -> dict:
         """

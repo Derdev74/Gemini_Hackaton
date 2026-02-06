@@ -20,6 +20,9 @@ import { useSession, signIn, signOut } from "next-auth/react"
 import { ItineraryView } from '../components/ItineraryView'
 import PreferencePanel, { Preferences } from '../components/PreferencePanel'
 import LoadingExperience from '../components/LoadingExperience'
+import { useOnlineStatus } from '../hooks/useOnlineStatus'
+import { offlineStorage } from '../lib/offline-storage'
+import { syncManager } from '../lib/sync-manager'
 
 /**
  * Message type definition for chat messages
@@ -64,6 +67,7 @@ interface AgentResponse {
  */
 export default function HomePage() {
   const { data: session } = useSession()
+  const isOnline = useOnlineStatus()
   const [authModalOpen, setAuthModalOpen] = useState(false)
   const [isLoginMode, setIsLoginMode] = useState(true)
   const [authEmail, setAuthEmail] = useState('')
@@ -145,6 +149,28 @@ Just type your preferences and I'll create a personalized travel plan for you!`,
     }).catch(() => { })
   }, [])
 
+  // Auto-sync pending saves when connection is restored
+  useEffect(() => {
+    if (isOnline && syncManager.hasPendingSaves()) {
+      console.log('🔄 Connection restored, syncing pending saves...')
+      syncManager.syncPending(process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000')
+        .then(() => {
+          if (syncManager.hasPendingSaves() === false) {
+            setMessages(prev => [...prev, {
+              id: `sys-${Date.now()}`,
+              role: 'assistant',
+              content: '✅ All offline saves have been synced!',
+              timestamp: new Date(),
+              agentSource: 'system'
+            }])
+          }
+        })
+        .catch(err => {
+          console.error('Sync failed:', err)
+        })
+    }
+  }, [isOnline])
+
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault()
     setAuthError('')
@@ -191,30 +217,96 @@ Just type your preferences and I'll create a personalized travel plan for you!`,
       return
     }
     const itinerary = message.itineraryData
+
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/itinerary/save`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          destination: itinerary?.destination || 'Unknown',
-          summary: itinerary?.summary || '',
-          itinerary_data: itinerary || {},
-          creative_assets: message.creativeData || {}
-        })
+      // ALWAYS save to IndexedDB first (works offline)
+      await offlineStorage.saveItinerary({
+        id: message.id,
+        destination: itinerary?.destination || 'Unknown',
+        summary: itinerary?.summary || '',
+        itinerary_data: itinerary || {},
+        creative_assets: message.creativeData || {}
       })
-      if (res.ok) {
-        setSavedIds(prev => new Set(prev).add(message.id))
+
+      setSavedIds(prev => new Set(prev).add(message.id))
+
+      // If online, also sync to backend
+      if (isOnline) {
+        try {
+          const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/itinerary/save`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({
+              destination: itinerary?.destination || 'Unknown',
+              summary: itinerary?.summary || '',
+              itinerary_data: itinerary || {},
+              creative_assets: message.creativeData || {},
+              media_task_id: message.creativeData?.task_id
+            })
+          })
+
+          if (res.ok) {
+            setMessages(prev => [...prev, {
+              id: `sys-${Date.now()}`,
+              role: 'assistant',
+              content: '✅ Your itinerary has been saved to your account!',
+              timestamp: new Date(),
+              agentSource: 'system'
+            }])
+          } else {
+            throw new Error('Backend save failed')
+          }
+        } catch (backendError) {
+          console.error('Backend save failed, queuing for sync:', backendError)
+          // Queue for sync when back online
+          syncManager.addPendingSave({
+            id: message.id,
+            data: {
+              destination: itinerary?.destination || 'Unknown',
+              summary: itinerary?.summary || '',
+              itinerary_data: itinerary || {},
+              creative_assets: message.creativeData || {},
+              media_task_id: message.creativeData?.task_id
+            }
+          })
+          setMessages(prev => [...prev, {
+            id: `sys-${Date.now()}`,
+            role: 'assistant',
+            content: '💾 Saved offline. Will sync when connection is restored.',
+            timestamp: new Date(),
+            agentSource: 'system'
+          }])
+        }
+      } else {
+        // Offline - queue for sync
+        syncManager.addPendingSave({
+          id: message.id,
+          data: {
+            destination: itinerary?.destination || 'Unknown',
+            summary: itinerary?.summary || '',
+            itinerary_data: itinerary || {},
+            creative_assets: message.creativeData || {},
+            media_task_id: message.creativeData?.task_id
+          }
+        })
         setMessages(prev => [...prev, {
           id: `sys-${Date.now()}`,
           role: 'assistant',
-          content: 'Your itinerary has been saved to your account!',
+          content: '💾 Saved offline. Will sync when you\'re back online.',
           timestamp: new Date(),
           agentSource: 'system'
         }])
       }
     } catch (e) {
-      console.error('Save failed', e)
+      console.error('Save failed:', e)
+      setMessages(prev => [...prev, {
+        id: `sys-${Date.now()}`,
+        role: 'assistant',
+        content: '❌ Failed to save itinerary. Please try again.',
+        timestamp: new Date(),
+        agentSource: 'system'
+      }])
     }
   }
 
@@ -633,16 +725,17 @@ Just type your preferences and I'll create a personalized travel plan for you!`,
                       value={inputValue}
                       onChange={(e) => setInputValue(e.target.value)}
                       onKeyDown={handleKeyDown}
-                      placeholder="Tell me about your dream trip..."
+                      placeholder={!isOnline ? "You're offline - chat unavailable" : "Tell me about your dream trip..."}
                       className="input-brutal flex-1"
-                      disabled={isLoading}
+                      disabled={isLoading || !isOnline}
                     />
                     <button
                       onClick={sendMessage}
-                      disabled={isLoading || (!inputValue.trim() && !selectedFile)}
+                      disabled={isLoading || !isOnline || (!inputValue.trim() && !selectedFile)}
                       className="btn-brutal-green disabled:opacity-50 disabled:cursor-not-allowed"
+                      title={!isOnline ? "Chat unavailable offline" : "Send message"}
                     >
-                      {isLoading ? '...' : 'SEND'}
+                      {isLoading ? '...' : !isOnline ? '📡' : 'SEND'}
                     </button>
                   </div>
                 </div>

@@ -80,12 +80,17 @@ class PathfinderAgent(BaseAgent):
                 # Get base flight results
                 flight_results = await asyncio.to_thread(self.transport_tools.search_flights, **args)
 
-                # Enrich with Amadeus intelligence for Optimizer
-                amadeus_intel = await self._enrich_with_amadeus_intelligence(
-                    origin=args.get("origin", ""),
-                    destination=args.get("destination", ""),
-                    departure_date=args.get("departure_date")
-                )
+                # Enrich with Amadeus intelligence ONLY if flights were found (Phase 1 optimization)
+                if isinstance(flight_results, list) and len(flight_results) > 0:
+                    logger.info(f"✈️  Found {len(flight_results)} flights, enriching with Amadeus intelligence")
+                    amadeus_intel = await self._enrich_with_amadeus_intelligence(
+                        origin=args.get("origin", ""),
+                        destination=args.get("destination", ""),
+                        departure_date=args.get("departure_date")
+                    )
+                else:
+                    logger.info("⏭️  Skipping Amadeus enrichment (no flights found)")
+                    amadeus_intel = {"amadeus_intelligence": None}
 
                 # Combine results
                 results = {

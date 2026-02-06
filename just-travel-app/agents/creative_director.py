@@ -63,25 +63,38 @@ class CreativeDirectorAgent(BaseAgent):
             poster_prompt = concept.get("poster_prompt", f"Travel poster for {itinerary_summary[:20]}")
             video_prompt = concept.get("video_prompt", f"Cinematic video of {itinerary_summary[:20]}")
             
-            # 2. Production: Generate Poster
-            # We run these sequentially or parallel. Parallel is better for speed, 
-            # BUT if we want to use the poster as input for the video (Image-to-Video), we must do sequential.
-            # User doc showed Image-to-Video is powerful. Let's try that flow if no upload is present.
-            
-            # A. Generate Poster
-            poster_url = await self.creative_tools.generate_image(poster_prompt)
-            
-            # B. Generate Video
-            # If user uploaded a file, use that as the anchor image for the video?
-            # Or use the generated poster?
-            # Let's prioritize User Upload > Generated Poster > Text Only
-            
-            video_input_image = uploaded_file if uploaded_file else poster_url
-            
-            # Note: uploaded_file should be a relative path like "/uploads/foo.png" 
-            # creative_tools handles resolving this.
-            
-            video_url = await self.creative_tools.generate_video(video_prompt, image_path=video_input_image)
+            # 2. Production: Generate Poster + Video in Parallel
+            # OPTIMIZATION: Run both in parallel for 2min speed improvement
+            # Video starts with text-only, fallback to Image-to-Video if needed
+
+            logger.info("Starting parallel media generation (poster + video)")
+
+            # Determine video input: User Upload > None (text-only, fastest)
+            video_input_image = uploaded_file if uploaded_file else None
+
+            # Run both tasks in parallel
+            poster_task = self.creative_tools.generate_image(poster_prompt)
+            video_task = self.creative_tools.generate_video(video_prompt, image_path=video_input_image)
+
+            poster_url, video_url = await asyncio.gather(poster_task, video_task, return_exceptions=True)
+
+            # Handle exceptions
+            if isinstance(poster_url, Exception):
+                logger.error(f"Poster generation failed: {poster_url}")
+                poster_url = ""
+
+            if isinstance(video_url, Exception):
+                logger.error(f"Video generation failed: {video_url}")
+                video_url = ""
+
+            # Fallback: If video failed and poster succeeded, try Image-to-Video
+            if not video_url and poster_url and not uploaded_file:
+                logger.info("Video failed, retrying with poster as Image-to-Video input")
+                try:
+                    video_url = await self.creative_tools.generate_video(video_prompt, image_path=poster_url)
+                except Exception as e:
+                    logger.error(f"Image-to-Video fallback also failed: {e}")
+                    video_url = ""
 
         except Exception as e:
             logger.error(f"Creative Director failed: {e}")

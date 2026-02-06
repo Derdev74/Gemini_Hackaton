@@ -19,6 +19,7 @@ import uuid
 from typing import Optional, Dict, Any
 from datetime import timedelta
 from dotenv import load_dotenv
+from cachetools import TTLCache
 
 # FastAPI & Rate Limiting
 from fastapi import FastAPI, Request, HTTPException, Depends, UploadFile, File, Query, Response, Cookie
@@ -28,6 +29,7 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import exists
 from sqlmodel import select
 
 # Import specialist agents
@@ -51,6 +53,9 @@ from auth import (
     REFRESH_TOKEN_EXPIRE_DAYS
 )
 
+# Import background task system
+from tasks import start_background_task, init_redis
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -63,6 +68,10 @@ load_dotenv()
 
 # --- Rate Limiter Setup ---
 limiter = Limiter(key_func=get_remote_address)
+
+# --- Phase 2 Optimization: Itinerary Cache (10 min TTL) ---
+itinerary_cache = TTLCache(maxsize=1000, ttl=600)
+
 app = FastAPI(title="Just Travel Agent API")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
@@ -71,6 +80,7 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 @app.on_event("startup")
 async def on_startup():
     await init_db()
+    await init_redis()  # Initialize Redis for background tasks
 
 # --- CORS Setup ---
 origins = [
@@ -109,6 +119,7 @@ class SaveItineraryRequest(BaseModel):
     summary: str
     itinerary_data: Dict[str, Any] = {}
     creative_assets: Dict[str, Any] = {}
+    media_task_id: Optional[str] = None  # Phase 3: Track background media generation
 
 # Auth Models
 class UserCreate(BaseModel):
@@ -276,23 +287,32 @@ class AntigravityAgentManager:
         }
         
         final_plan = await self.optimizer.async_process("generate itinerary", synthesis_context)
-        
-        # --- Step 4: Creative Director (Sequential) ---
-        # Generate visuals for the final plan
-        logger.info("Lights, Camera, Action! Calling Creative Director...")
-        
-        # Check if there was an uploaded file in the message
-        # In a real app, we'd pass this strictly, but here we can check the context
-        
-        creative_assets = await self.creative_director.async_process(final_plan, current_context)
-        
+
+        # --- Step 4: Creative Director (Background Task) ---
+        # Phase 3: Generate visuals asynchronously - return itinerary immediately!
+        logger.info("🎬 Queuing Creative Director as background task...")
+
+        # Generate unique task ID
+        task_id = str(uuid.uuid4())
+
+        # Start background task (non-blocking)
+        # Background task will save results to Redis and update DB if itinerary is saved
+        start_background_task(task_id, final_plan)
+        logger.info(f"✅ Background media generation started (task_id: {task_id})")
+
+        # Return immediately with placeholder media URLs
         return AgentResponse(
             agent="optimizer",
             status="success",
             message=final_plan.get("summary", "Here is your plan!"),
             profile=updated_profile,
             data={"itinerary": final_plan},
-            creative=creative_assets
+            creative={
+                "poster_url": None,
+                "video_url": None,
+                "status": "generating",
+                "task_id": task_id
+            }
         )
 
     def _should_trigger_research(self, message: str, profile: Dict) -> bool:
@@ -516,18 +536,27 @@ async def chat_endpoint(
         # Detect if user has existing itinerary (for hybrid routing)
         has_existing_itinerary = False
 
+        # Phase 2 optimization: Check itinerary cache first
+        cache_key = f"itinerary:{user.id}" if user else None
+        if cache_key and cache_key in itinerary_cache:
+            has_existing_itinerary = True
+            cached_itinerary = itinerary_cache[cache_key]
+            chat_req.preferences["existing_itinerary"] = cached_itinerary
+            logger.info(f"💾 Cache HIT for {cache_key} - routing to Chatbot")
+
         # Check 1: Does the conversation context contain an itinerary?
-        if chat_req.preferences.get("existing_itinerary") or chat_req.preferences.get("itinerary"):
+        elif chat_req.preferences.get("existing_itinerary") or chat_req.preferences.get("itinerary"):
             has_existing_itinerary = True
             logger.info("Detected existing itinerary in context - routing to Chatbot")
 
         # Check 2: For authenticated users, check database for saved itineraries
+        # Phase 1 optimization: Use EXISTS instead of fetching full row
         elif user:
-            statement = select(Itinerary).where(Itinerary.user_id == user.id).limit(1)
+            statement = select(exists(select(Itinerary.id).where(Itinerary.user_id == user.id)))
             result = await session.execute(statement)
-            if result.scalars().first():
-                has_existing_itinerary = True
-                logger.info(f"User {user.email} has saved itineraries - routing to Chatbot")
+            has_existing_itinerary = result.scalar()
+            if has_existing_itinerary:
+                logger.info(f"⚡ User {user.email} has saved itineraries - routing to Chatbot")
 
         # Route based on itinerary existence (Hybrid Approach)
         if has_existing_itinerary:
@@ -557,6 +586,12 @@ async def chat_endpoint(
             # First time or no itinerary → run full 6-agent pipeline
             logger.info("No existing itinerary detected - running full pipeline")
             response = await agent_manager.run_workflow(chat_req.message, chat_req.preferences)
+
+            # Phase 2 optimization: Cache new itinerary for authenticated users
+            if cache_key and response.data and response.data.get("itinerary"):
+                itinerary_cache[cache_key] = response.data["itinerary"]
+                logger.info(f"💾 Cached itinerary for {cache_key} (TTL: 10min)")
+
             return response
 
     except Exception as e:
@@ -570,17 +605,101 @@ async def save_itinerary(
     session: AsyncSession = Depends(get_session)
 ):
     """Save a generated itinerary. Requires authentication."""
+    # Phase 3: Include media tracking fields
     itinerary = Itinerary(
         user_id=user.id,
         destination=save_req.destination,
         summary=save_req.summary,
         data=save_req.itinerary_data,
-        creative_assets=save_req.creative_assets
+        creative_assets=save_req.creative_assets,
+        media_task_id=save_req.media_task_id,
+        media_status="generating" if save_req.media_task_id else "pending"
     )
     session.add(itinerary)
     await session.commit()
     await session.refresh(itinerary)
+
+    # If there's a background task running, it will update this itinerary when complete
+    if save_req.media_task_id:
+        logger.info(f"📝 Saved itinerary {itinerary.id} with media task {save_req.media_task_id}")
+
     return {"message": "Itinerary saved", "id": itinerary.id}
+
+@app.get("/api/itinerary/list")
+async def list_itineraries(
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """
+    List all itineraries for the authenticated user.
+    Returns itineraries sorted by creation date (newest first).
+    """
+    from sqlmodel import select
+
+    result = await session.execute(
+        select(Itinerary)
+        .where(Itinerary.user_id == user.id)
+        .order_by(Itinerary.created_at.desc())
+    )
+    itineraries = result.scalars().all()
+
+    return {
+        "itineraries": [
+            {
+                "id": str(itin.id),
+                "destination": itin.destination,
+                "summary": itin.summary,
+                "data": itin.data,
+                "creative_assets": itin.creative_assets,
+                "poster_url": itin.poster_url,
+                "video_url": itin.video_url,
+                "media_status": itin.media_status,
+                "created_at": itin.created_at.isoformat()
+            }
+            for itin in itineraries
+        ]
+    }
+
+@app.get("/api/media-status/{task_id}")
+async def get_media_status(task_id: str):
+    """
+    Poll the status of a background media generation task.
+    Phase 3: Allows frontend to check if poster/video are ready.
+    """
+    from tasks import get_task_status
+
+    # Query Redis for task status
+    task_data = await get_task_status(task_id)
+
+    if not task_data:
+        # Task not found (expired or never existed)
+        return {
+            "status": "not_found",
+            "message": "Task not found or expired"
+        }
+
+    status = task_data.get("status")
+    result = task_data.get("result", {})
+
+    if status == "completed":
+        return {
+            "status": "completed",
+            "poster_url": result.get("poster_url"),
+            "video_url": result.get("video_url"),
+            "updated_at": task_data.get("updated_at")
+        }
+    elif status == "failed":
+        return {
+            "status": "failed",
+            "error": result.get("error", "Unknown error"),
+            "updated_at": task_data.get("updated_at")
+        }
+    else:  # generating or pending
+        return {
+            "status": status,
+            "message": "Media generation in progress...",
+            "updated_at": task_data.get("updated_at")
+        }
 
 @app.post("/api/upload")
 @limiter.limit("5/minute")

@@ -25,6 +25,9 @@ export default function NavHeader() {
             <a href="#how-it-works" className="font-mono font-bold uppercase text-sm text-white/70 hover:text-brutal-orange no-underline transition-colors">
               How It Works
             </a>
+            <a href="/my-itineraries" className="font-mono font-bold uppercase text-sm text-white/70 hover:text-brutal-orange no-underline transition-colors">
+              My Trips
+            </a>
             <a href="#chat" className="btn-brutal text-sm">
               Start Planning
             </a>
@@ -54,6 +57,9 @@ export default function NavHeader() {
             </a>
             <a href="#how-it-works" onClick={() => setMobileOpen(false)} className="font-mono font-bold uppercase text-sm text-white/70 hover:text-brutal-orange no-underline">
               How It Works
+            </a>
+            <a href="/my-itineraries" onClick={() => setMobileOpen(false)} className="font-mono font-bold uppercase text-sm text-white/70 hover:text-brutal-orange no-underline">
+              My Trips
             </a>
             <a href="#chat" onClick={() => setMobileOpen(false)} className="btn-brutal text-sm w-fit">
               Start Planning

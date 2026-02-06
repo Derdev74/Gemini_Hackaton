@@ -89,13 +89,14 @@ class ConciergeAgent(BaseAgent):
                 )
 
                 # Enrich top results in parallel
+                # Phase 2 optimization: Reduce enrichment to top 3 (saves 1-2 sec)
                 if results:
                     detail_tasks = [
                         asyncio.to_thread(self.maps_tools.get_place_details, place.get("place_id"))
-                        for place in results[:5]
+                        for place in results[:3]
                     ]
                     details_list = await asyncio.gather(*detail_tasks)
-                    results = [{**place, "details": details} for place, details in zip(results[:5], details_list)]
+                    results = [{**place, "details": details} for place, details in zip(results[:3], details_list)]
 
         except Exception as e:
             logger.error(f"Concierge error: {e}")
