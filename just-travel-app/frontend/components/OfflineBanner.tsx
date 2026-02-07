@@ -1,6 +1,6 @@
 /**
  * OfflineBanner - Shows notification when offline
- * Appears as a fixed banner at the top of the screen
+ * Neo-brutalist style with yellow background
  */
 
 'use client'
@@ -16,10 +16,10 @@ export default function OfflineBanner() {
   }
 
   return (
-    <div className="fixed top-0 left-0 right-0 z-50 bg-brutal-orange/90 backdrop-blur-sm text-white py-3 px-4 text-center font-bold border-b-4 border-brutal-orange shadow-lg">
+    <div className="fixed top-0 left-0 right-0 z-50 bg-brutal-yellow text-brutal-black py-3 px-4 text-center font-mono font-bold border-b-4 border-orange-400 shadow-brutal">
       <div className="flex items-center justify-center gap-2">
         <span className="text-2xl">📡</span>
-        <span>You're offline. Some features are limited.</span>
+        <span className="uppercase tracking-wide">You're offline. Some features are limited.</span>
       </div>
     </div>
   )

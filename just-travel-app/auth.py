@@ -10,8 +10,14 @@ from passlib.context import CryptContext
 logger = logging.getLogger(__name__)
 
 # --- Configuration ---
-# Use a default secret for dev if not set
-SECRET_KEY = os.getenv("NEXTAUTH_SECRET", "DEV_SECRET_KEY_CHANGE_ME_IMMEDIATELY")
+# SECRET_KEY must be set in environment - no insecure defaults
+SECRET_KEY = os.getenv("NEXTAUTH_SECRET")
+if not SECRET_KEY:
+    # Allow dev mode with warning, but require in production
+    if os.getenv("ENV", "development") == "production":
+        raise RuntimeError("NEXTAUTH_SECRET environment variable is required in production")
+    SECRET_KEY = "DEV_SECRET_KEY_CHANGE_ME_IMMEDIATELY"
+    logger.warning("Using insecure default SECRET_KEY - set NEXTAUTH_SECRET in production!")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 15
 REFRESH_TOKEN_EXPIRE_DAYS = 7

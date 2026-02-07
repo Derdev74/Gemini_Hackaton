@@ -1,53 +1,26 @@
 /**
- * Just Travel - Main Page (Orchestrator Bridge)
- * ==============================================
+ * Just Travel - Main Page
+ * =======================
  *
- * This is the main entry page for the Just Travel application.
- * It serves as the orchestrator bridge to the Python ADK backend,
- * providing a chat interface for users to interact with the AI agents.
- *
- * Features:
- * - Neo-brutalist design aesthetic
- * - Chat interface for travel planning
- * - Real-time communication with backend agents
- * - Display of travel recommendations and itineraries
+ * Dark glassmorphism design with 6-section travel form,
+ * floating chat bubble, and full auth integration.
  */
 
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import React, { useState, useMemo, useEffect, useRef } from 'react'
+import dynamic from 'next/dynamic'
+import { motion, AnimatePresence } from 'framer-motion'
+import countryList from 'react-select-country-list'
 import { useSession, signIn, signOut } from "next-auth/react"
 import { ItineraryView } from '../components/ItineraryView'
-import PreferencePanel, { Preferences } from '../components/PreferencePanel'
-import LoadingExperience from '../components/LoadingExperience'
+import TransportBox from '../components/TransportBox'
+import FoodBox from '../components/FoodBox'
 import { useOnlineStatus } from '../hooks/useOnlineStatus'
 import { offlineStorage } from '../lib/offline-storage'
 import { syncManager } from '../lib/sync-manager'
 
-/**
- * Message type definition for chat messages
- */
-interface Message {
-  id: string
-  role: 'user' | 'assistant' | 'system'
-  content: string
-  timestamp: Date
-  agentSource?: string
-  itineraryData?: any
-  uploadedImage?: string
-  creativeData?: any
-}
-
-/**
- * Travel preferences captured from user
- */
-interface TravelPreferences {
-  destination?: string
-  dates?: { start: string; end: string }
-  dietary?: string[]
-  budget?: string
-  interests?: string[]
-}
+const Select = dynamic(() => import('react-select'), { ssr: false })
 
 /**
  * API response type from backend
@@ -58,118 +31,124 @@ interface AgentResponse {
   message?: string
   profile?: unknown
   data?: { itinerary?: any }
-  creative?: { poster_url?: string; video_url?: string }
-  type?: 'optimization_update' | 'standard_chat'  // Chatbot response types
+  creative?: { poster_url?: string; video_url?: string; task_id?: string; status?: string }
+  type?: 'optimization_update' | 'standard_chat'
 }
 
 /**
- * Main page component - Orchestrator Bridge
+ * Main page component
  */
-export default function HomePage() {
+export default function JustTravelApp() {
   const { data: session } = useSession()
   const isOnline = useOnlineStatus()
+  const [isClient, setIsClient] = useState(false)
+  const countryOptions = useMemo(() => countryList().getData(), [])
+
+  // Form state
+  const [loading, setLoading] = useState(false)
+  const [showResults, setShowResults] = useState(false)
+  const [formData, setFormData] = useState({
+    originCountry: null as any,
+    originCity: '',
+    destCountry: null as any,
+    destCity: '',
+    flightType: 'direct',
+    maxStopoverTime: '2',
+    travelers: 1,
+    budget: '',
+    budgetType: 'per-person',
+    eatOutside: 'no',
+    dietary: '',
+    meals: [] as string[]
+  })
+
+  // Chat state
+  const [isChatOpen, setIsChatOpen] = useState(false)
+  const [chatInput, setChatInput] = useState('')
+  const [chatMessages, setChatMessages] = useState<Array<{ role: 'user' | 'bot'; text: string }>>([
+    { role: 'bot', text: "Hi! I'm your AI guide. Need help planning or have questions about your destination?" }
+  ])
+  const [chatLoading, setChatLoading] = useState(false)
+
+  // Auth state
   const [authModalOpen, setAuthModalOpen] = useState(false)
   const [isLoginMode, setIsLoginMode] = useState(true)
   const [authEmail, setAuthEmail] = useState('')
   const [authPassword, setAuthPassword] = useState('')
   const [authName, setAuthName] = useState('')
   const [authError, setAuthError] = useState('')
+  const [currentUser, setCurrentUser] = useState<{ email: string; full_name?: string } | null>(null)
 
-  // State management
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: 'welcome',
-      role: 'assistant',
-      content: `Welcome to Just Travel! I'm your AI travel planning assistant.
-
-I can help you plan the perfect trip based on your preferences, dietary requirements, and interests.
-
-To get started, tell me:
-- Where would you like to travel?
-- Do you have any dietary restrictions? (vegetarian, halal, kosher, etc.)
-- What's your travel style? (adventure, relaxation, cultural, etc.)
-
-Just type your preferences and I'll create a personalized travel plan for you!`,
-      timestamp: new Date(),
-      agentSource: 'system'
-    }
-  ])
-  const [inputValue, setInputValue] = useState('')
-  const [isLoading, setIsLoading] = useState(false)
-  const [preferences, setPreferences] = useState<TravelPreferences>({})
-  const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  // Itinerary state
+  const [latestItinerary, setLatestItinerary] = useState<any>(null)
   const [savedIds, setSavedIds] = useState<Set<string>>(new Set())
-  const [pendingSave, setPendingSave] = useState<Message | null>(null)
-  const [panelPrefs, setPanelPrefs] = useState<Preferences>({
-    dietary: [], budget: 200, tripType: '', companionType: '', startDate: '', endDate: ''
-  })
-  const [notification, setNotification] = useState<string>('')  // For chatbot update notifications
-  const [latestItinerary, setLatestItinerary] = useState<any>(null)  // Track latest itinerary for context
+  const [pendingSave, setPendingSave] = useState<any>(null)
+  const [notification, setNotification] = useState('')
+
+  // Refs
+  const chatContainerRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => { setIsClient(true) }, [])
+
+  // Auto-scroll chat
+  useEffect(() => {
+    if (chatContainerRef.current) {
+      chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight
+    }
+  }, [chatMessages])
 
   // Sync Google Session with Backend
   useEffect(() => {
     // @ts-ignore
     if (session?.id_token) {
-      // Exchange token
-      fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/auth/google`, {
+      fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/auth/google`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'include', // Fix: Ensure cookies are set
+        credentials: 'include',
         // @ts-ignore
         body: JSON.stringify({ id_token: session.id_token })
       }).then(async res => {
         if (res.ok) {
           const data = await res.json()
-          console.log("Synced with Backend via Google")
-          setCurrentUser(data.user) // Update local state for UI feedback
+          setCurrentUser(data.user)
           setAuthModalOpen(false)
-          // Force a refresh of next-auth session if needed, but we rely on cookies mostly now
-        } else {
-          const errData = await res.json().catch(() => ({}))
-          console.error("Google Sync Failed:", res.status, errData)
         }
-      }).catch(err => {
-        console.error("Google Sync Fetch Error:", err)
-      })
+      }).catch(console.error)
     }
   }, [session])
 
-  // UI State for Local User
-  const [currentUser, setCurrentUser] = useState<{ email: string, full_name?: string } | null>(null)
-
   // Check valid session on mount
   useEffect(() => {
-    fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/auth/me`, {
+    fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/auth/me`, {
       credentials: 'include'
     }).then(async res => {
       if (res.ok) {
         const user = await res.json()
         setCurrentUser(user)
       }
-    }).catch(() => { })
+    }).catch(() => {})
   }, [])
 
   // Auto-sync pending saves when connection is restored
   useEffect(() => {
     if (isOnline && syncManager.hasPendingSaves()) {
-      console.log('🔄 Connection restored, syncing pending saves...')
       syncManager.syncPending(process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000')
         .then(() => {
-          if (syncManager.hasPendingSaves() === false) {
-            setMessages(prev => [...prev, {
-              id: `sys-${Date.now()}`,
-              role: 'assistant',
-              content: '✅ All offline saves have been synced!',
-              timestamp: new Date(),
-              agentSource: 'system'
-            }])
+          if (!syncManager.hasPendingSaves()) {
+            setNotification('✅ All offline saves have been synced!')
+            setTimeout(() => setNotification(''), 5000)
           }
         })
-        .catch(err => {
-          console.error('Sync failed:', err)
-        })
+        .catch(console.error)
     }
   }, [isOnline])
+
+  const handleMealChange = (meal: string) => {
+    setFormData(prev => ({
+      ...prev,
+      meals: prev.meals.includes(meal) ? prev.meals.filter(m => m !== meal) : [...prev.meals, meal]
+    }))
+  }
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -181,717 +160,576 @@ Just type your preferences and I'll create a personalized travel plan for you!`,
       : { email: authEmail, password: authPassword, full_name: authName }
 
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}${endpoint}`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}${endpoint}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'include', // Fix: Ensure cookies are set
+        credentials: 'include',
         body: JSON.stringify(body)
       })
 
       if (res.ok) {
         const data = await res.json()
-        const loggedInUser = data.user || { email: authEmail, full_name: authName }
-        setCurrentUser(loggedInUser)
+        setCurrentUser(data.user || { email: authEmail, full_name: authName })
         setAuthModalOpen(false)
         setAuthEmail('')
         setAuthPassword('')
-        // If user was trying to save a plan before logging in, do it now
         if (pendingSave) {
-          const msg = pendingSave
+          const save = pendingSave
           setPendingSave(null)
-          setTimeout(() => savePlan(msg), 100)
+          setTimeout(() => savePlan(save), 100)
         }
       } else {
         const data = await res.json()
         setAuthError(data.detail || 'Authentication failed')
       }
-    } catch (err) {
+    } catch {
       setAuthError('Connection error')
     }
   }
 
-  const savePlan = async (message: Message) => {
+  const savePlan = async (itinerary: any) => {
     if (!currentUser) {
-      setPendingSave(message)
+      setPendingSave(itinerary)
       setAuthModalOpen(true)
       return
     }
-    const itinerary = message.itineraryData
 
     try {
-      // ALWAYS save to IndexedDB first (works offline)
       await offlineStorage.saveItinerary({
-        id: message.id,
-        destination: itinerary?.destination || 'Unknown',
+        id: `itin-${Date.now()}`,
+        destination: itinerary?.destination || formData.destCity || 'Unknown',
         summary: itinerary?.summary || '',
         itinerary_data: itinerary || {},
-        creative_assets: message.creativeData || {}
+        creative_assets: {}
       })
 
-      setSavedIds(prev => new Set(prev).add(message.id))
+      setSavedIds(prev => new Set(prev).add(`itin-${Date.now()}`))
 
-      // If online, also sync to backend
       if (isOnline) {
-        try {
-          const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/itinerary/save`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'include',
-            body: JSON.stringify({
-              destination: itinerary?.destination || 'Unknown',
-              summary: itinerary?.summary || '',
-              itinerary_data: itinerary || {},
-              creative_assets: message.creativeData || {},
-              media_task_id: message.creativeData?.task_id
-            })
-          })
-
-          if (res.ok) {
-            setMessages(prev => [...prev, {
-              id: `sys-${Date.now()}`,
-              role: 'assistant',
-              content: '✅ Your itinerary has been saved to your account!',
-              timestamp: new Date(),
-              agentSource: 'system'
-            }])
-          } else {
-            throw new Error('Backend save failed')
-          }
-        } catch (backendError) {
-          console.error('Backend save failed, queuing for sync:', backendError)
-          // Queue for sync when back online
-          syncManager.addPendingSave({
-            id: message.id,
-            data: {
-              destination: itinerary?.destination || 'Unknown',
-              summary: itinerary?.summary || '',
-              itinerary_data: itinerary || {},
-              creative_assets: message.creativeData || {},
-              media_task_id: message.creativeData?.task_id
-            }
-          })
-          setMessages(prev => [...prev, {
-            id: `sys-${Date.now()}`,
-            role: 'assistant',
-            content: '💾 Saved offline. Will sync when connection is restored.',
-            timestamp: new Date(),
-            agentSource: 'system'
-          }])
-        }
-      } else {
-        // Offline - queue for sync
-        syncManager.addPendingSave({
-          id: message.id,
-          data: {
-            destination: itinerary?.destination || 'Unknown',
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/itinerary/save`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({
+            destination: itinerary?.destination || formData.destCity || 'Unknown',
             summary: itinerary?.summary || '',
             itinerary_data: itinerary || {},
-            creative_assets: message.creativeData || {},
-            media_task_id: message.creativeData?.task_id
+            creative_assets: {}
+          })
+        })
+
+        if (res.ok) {
+          setNotification('✅ Your itinerary has been saved!')
+          setTimeout(() => setNotification(''), 5000)
+        }
+      } else {
+        syncManager.addPendingSave({
+          id: `itin-${Date.now()}`,
+          data: {
+            destination: itinerary?.destination || formData.destCity || 'Unknown',
+            summary: itinerary?.summary || '',
+            itinerary_data: itinerary || {},
+            creative_assets: {}
           }
         })
-        setMessages(prev => [...prev, {
-          id: `sys-${Date.now()}`,
-          role: 'assistant',
-          content: '💾 Saved offline. Will sync when you\'re back online.',
-          timestamp: new Date(),
-          agentSource: 'system'
-        }])
+        setNotification('💾 Saved offline. Will sync when you\'re back online.')
+        setTimeout(() => setNotification(''), 5000)
       }
     } catch (e) {
       console.error('Save failed:', e)
-      setMessages(prev => [...prev, {
-        id: `sys-${Date.now()}`,
-        role: 'assistant',
-        content: '❌ Failed to save itinerary. Please try again.',
-        timestamp: new Date(),
-        agentSource: 'system'
-      }])
     }
   }
 
-  // Refs
-  const chatContainerRef = useRef<HTMLDivElement>(null)
-  const inputRef = useRef<HTMLInputElement>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
-
-  // Auto-scroll to bottom on new messages
-  useEffect(() => {
-    if (chatContainerRef.current) {
-      chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight
-    }
-  }, [messages])
-
-  /**
-   * Send message to backend and get response
-   */
-  const sendMessage = async () => {
-    if ((!inputValue.trim() && !selectedFile) || isLoading) return
-
-    let uploadedUrl = ''
-
-    // 1. Handle File Upload if present
-    if (selectedFile) {
-      try {
-        const formData = new FormData()
-        formData.append('file', selectedFile)
-
-        const uploadRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/upload`, {
-          method: 'POST',
-          body: formData
-        })
-
-        if (uploadRes.ok) {
-          const data = await uploadRes.json()
-          uploadedUrl = data.url
-        } else {
-          console.error("Upload failed")
-        }
-      } catch (e) {
-        console.error("Upload error", e)
-      }
-    }
-
-    const userMessage: Message = {
-      id: `user-${Date.now()}`,
-      role: 'user',
-      content: inputValue,
-      timestamp: new Date(),
-      uploadedImage: uploadedUrl
-    }
-
-    setMessages(prev => [...prev, userMessage])
-    setInputValue('')
-    setSelectedFile(null)
-    setIsLoading(true)
-
+  const handleGenerate = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setLoading(true)
+    setShowResults(false)
 
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/chat`, {
+      const message = `I want to travel from ${formData.originCity}, ${formData.originCountry?.label || ''} to ${formData.destCity}, ${formData.destCountry?.label || ''}.
+${formData.travelers} traveler(s), budget: $${formData.budget} ${formData.budgetType}.
+Flight preference: ${formData.flightType}${formData.flightType === 'stops' ? ` (max ${formData.maxStopoverTime}h layover)` : ''}.
+${formData.eatOutside === 'yes' ? `Dining: ${formData.dietary || 'Standard'}, meals: ${formData.meals.join(', ')}` : 'No dining recommendations needed.'}`
+
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'include', // Important for Cookies
+        credentials: 'include',
         body: JSON.stringify({
-          message: inputValue,
+          message,
           preferences: {
-            ...preferences,
-            dietary: panelPrefs.dietary,
-            budget_per_day_usd: panelPrefs.budget,
-            trip_type: panelPrefs.tripType,
-            companion_type: panelPrefs.companionType || undefined,
-            travel_dates: panelPrefs.startDate && panelPrefs.endDate
-              ? { start: panelPrefs.startDate, end: panelPrefs.endDate }
-              : undefined,
-            existing_itinerary: latestItinerary || undefined,  // Pass context for chatbot
-          },
-          uploaded_file: uploadedUrl || undefined
+            dietary: formData.dietary ? [formData.dietary] : [],
+            budget_per_day_usd: parseInt(formData.budget) || 200,
+            trip_type: 'exploration',
+            destination: formData.destCity
+          }
         })
       })
 
-      if (!res.ok) throw new Error('API request failed')
-
-      const response: AgentResponse = await res.json()
-
-      // Handle chatbot optimization updates
-      if (response.type === 'optimization_update') {
-        setNotification('✅ Your itinerary has been updated based on your request!')
-        setTimeout(() => setNotification(''), 5000)  // Clear notification after 5s
+      if (res.ok) {
+        const response: AgentResponse = await res.json()
+        if (response.data?.itinerary) {
+          setLatestItinerary(response.data.itinerary)
+        }
+        setShowResults(true)
       }
-
-      // Track latest itinerary for context in follow-up messages
-      if (response.data?.itinerary) {
-        setLatestItinerary(response.data.itinerary)
-      }
-
-      const assistantMessage: Message = {
-        id: `assistant-${Date.now()}`,
-        role: 'assistant',
-        content: response.message || 'I received your request.',
-        timestamp: new Date(),
-        agentSource: response.agent,
-        itineraryData: response.data?.itinerary,
-        creativeData: response.creative
-      }
-
-      setMessages(prev => [...prev, assistantMessage])
-
-      // Update preferences if extracted
-      if (response.profile) {
-        setPreferences(prev => ({ ...prev, ...response.profile as TravelPreferences }))
-      }
-
     } catch (error) {
-      console.error(error)
-      const errorMessage: Message = {
-        id: `error-${Date.now()}`,
-        role: 'assistant',
-        content: "We're having trouble reaching our travel experts right now. Please try again in a moment.",
-        timestamp: new Date(),
-        agentSource: 'system'
-      }
-      setMessages(prev => [...prev, errorMessage])
+      console.error('Generation error:', error)
     } finally {
-      setIsLoading(false)
-      inputRef.current?.focus()
+      setLoading(false)
     }
   }
 
-  /**
-   * Handle keyboard events (Enter to send)
-   */
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      sendMessage()
+  const handleChatSubmit = async () => {
+    if (!chatInput.trim() || chatLoading) return
+
+    setChatMessages(prev => [...prev, { role: 'user', text: chatInput }])
+    setChatInput('')
+    setChatLoading(true)
+
+    try {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          message: chatInput,
+          preferences: {
+            existing_itinerary: latestItinerary
+          }
+        })
+      })
+
+      if (res.ok) {
+        const data: AgentResponse = await res.json()
+        setChatMessages(prev => [...prev, { role: 'bot', text: data.message || "I'm here to help!" }])
+
+        if (data.type === 'optimization_update' && data.data?.itinerary) {
+          setLatestItinerary(data.data.itinerary)
+          setNotification('✅ Your itinerary has been updated!')
+          setTimeout(() => setNotification(''), 5000)
+        }
+      }
+    } catch {
+      setChatMessages(prev => [...prev, { role: 'bot', text: "Sorry, I couldn't connect. Please try again." }])
+    } finally {
+      setChatLoading(false)
     }
   }
+
+  if (!isClient) return null
 
   return (
-    <div className="min-h-screen">
-      {/* Hero Section */}
-      <section className="relative overflow-hidden border-b border-white/10 bg-gradient-to-br from-[#0f0f23] via-[#1a1035] to-[#0f1a23]">
-        <div className="container mx-auto px-4 py-16 md:py-24">
-          <div className="max-w-4xl mx-auto text-center">
-            <h1 className="text-5xl md:text-7xl font-mono font-bold mb-6 text-white text-stroke">
-              PLAN YOUR
-              <span className="block bg-black/60 backdrop-blur-sm text-brutal-yellow px-4 py-2 mt-2 inline-block rotate-brutal border border-yellow-500/20">
-                PERFECT TRIP
-              </span>
-            </h1>
-            <p className="text-xl md:text-2xl font-mono mb-8 max-w-2xl mx-auto text-white/70">
-              AI-powered travel planning that respects your dietary needs,
-              budget, and travel style.
-            </p>
-            <div className="flex flex-wrap justify-center gap-4">
-              <a href="#chat" className="btn-brutal-yellow">
-                Start Planning
-              </a>
-              <a href="#features" className="btn-brutal">
-                Learn More
-              </a>
+    <main id="plan" className="min-h-screen flex flex-col items-center py-12 px-4 relative">
+      {/* Notification Banner */}
+      {notification && (
+        <div className="fixed top-20 left-1/2 transform -translate-x-1/2 z-50 bg-gradient-to-r from-orange-500 to-pink-500 text-white px-6 py-3 rounded-full font-bold shadow-lg shadow-orange-500/30 animate-slide-up">
+          {notification}
+        </div>
+      )}
+
+      {/* User Status Bar */}
+      <div className="w-full max-w-3xl mb-6 flex justify-end items-center gap-4">
+        {currentUser ? (
+          <div className="flex items-center gap-3 bg-white/5 backdrop-blur-xl border border-white/10 px-4 py-2 rounded-full">
+            <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></div>
+            <span className="font-mono text-sm text-white/80">{currentUser.full_name || currentUser.email}</span>
+            <button
+              onClick={async () => {
+                await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/auth/logout`, {
+                  method: 'POST',
+                  credentials: 'include'
+                })
+                setCurrentUser(null)
+                signOut({ redirect: false })
+              }}
+              className="text-xs font-mono text-white/50 hover:text-orange-400 transition-colors"
+            >
+              Logout
+            </button>
+            <button
+              onClick={async () => {
+                if (!window.confirm('Delete your account? This cannot be undone.')) return
+                const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/auth/account`, {
+                  method: 'DELETE',
+                  credentials: 'include'
+                })
+                if (res.ok) {
+                  setCurrentUser(null)
+                  signOut({ redirect: false })
+                }
+              }}
+              className="text-xs font-mono text-red-400/70 hover:text-red-400 transition-colors"
+            >
+              Delete
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={() => setAuthModalOpen(true)}
+            className="bg-gradient-to-r from-orange-500 to-pink-500 text-white font-mono font-bold text-sm px-5 py-2.5 rounded-full hover:opacity-90 transition-all shadow-lg shadow-orange-500/25"
+          >
+            Login / Signup
+          </button>
+        )}
+      </div>
+
+      {/* Header */}
+      <header className="mb-10 text-center">
+        <h1 className="text-5xl md:text-6xl font-black text-white tracking-tighter uppercase">
+          Plan Your <span className="text-orange-400">Journey</span>
+        </h1>
+        <p className="text-white/50 font-medium tracking-widest mt-2">AI-Powered Travel Planning</p>
+        <div className="h-1 w-24 bg-gradient-to-r from-orange-500 to-pink-500 mx-auto mt-4 rounded-full shadow-lg shadow-orange-500/30" />
+      </header>
+
+      {/* Main Form - Dark Glassmorphism */}
+      <div className="max-w-3xl w-full bg-white/[0.03] backdrop-blur-3xl rounded-[40px] border border-white/10 p-8 md:p-12 shadow-2xl mb-20">
+        <form onSubmit={handleGenerate} className="space-y-12">
+
+          {/* 1. Origin & Destination */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
+            <div className="space-y-4">
+              <label className="text-orange-400 font-black text-sm uppercase tracking-widest">1. From Where</label>
+              <Select
+                options={countryOptions}
+                placeholder="Country..."
+                onChange={(val) => setFormData({ ...formData, originCountry: val })}
+                styles={darkSelectStyles}
+              />
+              <input
+                required
+                type="text"
+                placeholder="CITY NAME"
+                value={formData.originCity}
+                className="w-full bg-transparent border-b-2 border-white/10 py-2 text-2xl text-white outline-none focus:border-orange-500 font-bold uppercase transition-all placeholder:text-white/20"
+                onChange={(e) => setFormData({ ...formData, originCity: e.target.value })}
+              />
+            </div>
+
+            <div className="space-y-4">
+              <label className="text-orange-400 font-black text-sm uppercase tracking-widest">2. Destination</label>
+              <Select
+                options={countryOptions}
+                placeholder="Country..."
+                onChange={(val) => setFormData({ ...formData, destCountry: val })}
+                styles={darkSelectStyles}
+              />
+              <input
+                required
+                type="text"
+                placeholder="CITY NAME"
+                value={formData.destCity}
+                className="w-full bg-transparent border-b-2 border-white/10 py-2 text-2xl text-white outline-none focus:border-blue-400 font-bold uppercase transition-all placeholder:text-white/20"
+                onChange={(e) => setFormData({ ...formData, destCity: e.target.value })}
+              />
             </div>
           </div>
-        </div>
-      </section>
 
-      {/* Features Section */}
-      <section id="features" className="py-16 md:py-24">
-        <div className="container mx-auto px-4">
-          <h2 className="text-4xl font-mono font-bold text-center mb-12">
-            <span className="bg-black/60 backdrop-blur-sm px-4 py-2 border border-brutal-orange/40 text-brutal-orange" style={{boxShadow:'0 0 16px rgba(0,212,255,0.2)'}}>
-              FEATURES
-            </span>
-          </h2>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 max-w-6xl mx-auto">
-            {/* Feature 1 */}
-            <div className="card-brutal border-glow-yellow rotate-brutal hover:rotate-0 transition-transform">
-              <div className="text-4xl mb-4">🍽️</div>
-              <h3 className="text-xl font-mono font-bold mb-2 text-brutal-yellow">Dietary Aware</h3>
-              <p className="text-white/70">
-                Respects your dietary restrictions - vegetarian, vegan, halal,
-                kosher, and allergen-free options.
-              </p>
+          {/* 3. Flight Preference */}
+          <div className="bg-white/5 p-6 rounded-3xl border border-white/10 space-y-6">
+            <label className="text-orange-400 font-black text-sm uppercase tracking-widest">3. Flight Preference</label>
+            <div className="flex gap-4">
+              {['direct', 'stops'].map((type) => (
+                <button
+                  key={type}
+                  type="button"
+                  onClick={() => setFormData({ ...formData, flightType: type })}
+                  className={`flex-1 py-4 rounded-2xl font-black text-sm transition-all ${
+                    formData.flightType === type
+                      ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/30'
+                      : 'bg-white/5 text-white/40 hover:bg-white/10'
+                  }`}
+                >
+                  {type === 'direct' ? 'DIRECT FLIGHT' : 'WITH STOPS'}
+                </button>
+              ))}
             </div>
-
-            {/* Feature 2 */}
-            <div className="card-brutal border-glow-green rotate-brutal-reverse hover:rotate-0 transition-transform">
-              <div className="text-4xl mb-4">📊</div>
-              <h3 className="text-xl font-mono font-bold mb-2 text-brutal-green">Trend Analysis</h3>
-              <p className="text-white/70">
-                Discovers trending destinations and hidden gems from social
-                media and travel communities.
-              </p>
-            </div>
-
-            {/* Feature 3 */}
-            <div className="card-brutal border-glow-pink rotate-brutal hover:rotate-0 transition-transform">
-              <div className="text-4xl mb-4">🗺️</div>
-              <h3 className="text-xl font-mono font-bold mb-2 text-brutal-purple">Smart Routing</h3>
-              <p className="text-white/70">
-                Optimizes your daily itinerary to minimize travel time and
-                maximize experiences.
-              </p>
-            </div>
-
-            {/* Feature 4 */}
-            <div className="card-brutal border-glow-orange rotate-brutal-reverse hover:rotate-0 transition-transform">
-              <div className="text-4xl mb-4">🏨</div>
-              <h3 className="text-xl font-mono font-bold mb-2 text-brutal-orange">Curated Stays</h3>
-              <p className="text-white/70">
-                Finds accommodations that match your budget and preferences
-                with verified reviews.
-              </p>
-            </div>
-
-            {/* Feature 5 */}
-            <div className="card-brutal border-glow-pink rotate-brutal hover:rotate-0 transition-transform">
-              <div className="text-4xl mb-4">🤖</div>
-              <h3 className="text-xl font-mono font-bold mb-2 text-brutal-pink">AI Agents</h3>
-              <p className="text-white/70">
-                Five specialized AI agents work together to create your
-                perfect travel experience.
-              </p>
-            </div>
-
-            {/* Feature 6 */}
-            <div className="card-brutal border-glow-orange rotate-brutal-reverse hover:rotate-0 transition-transform">
-              <div className="text-4xl mb-4">📅</div>
-              <h3 className="text-xl font-mono font-bold mb-2 text-brutal-orange">Dynamic Planning</h3>
-              <p className="text-white/70">
-                Generates day-by-day itineraries that adapt to weather,
-                crowds, and your energy levels.
-              </p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Chat Section */}
-      <section id="chat" className="py-16 md:py-24 bg-black/60">
-        <div className="container mx-auto px-4">
-          <h2 className="text-4xl font-mono font-bold text-center mb-12">
-            <span className="bg-black/60 backdrop-blur-sm px-4 py-2 border border-brutal-yellow/40 text-brutal-yellow" style={{boxShadow:'0 0 16px rgba(255,225,53,0.2)'}}>
-              START PLANNING
-            </span>
-          </h2>
-
-          {/* Chat Interface */}
-          <div className="max-w-4xl mx-auto">
-            <PreferencePanel value={panelPrefs} onChange={setPanelPrefs} />
-
-            {/* Notification Banner */}
-            {notification && (
-              <div className="mb-4 p-4 rounded-2xl bg-brutal-green/10 border border-brutal-green/30 backdrop-blur-xl animate-slide-up" style={{boxShadow: '0 0 12px rgba(0,255,133,0.2)'}}>
-                <p className="font-mono text-sm text-white text-center">{notification}</p>
+            {formData.flightType === 'stops' && (
+              <div className="pt-2">
+                <label className="text-white/60 text-xs font-bold mb-2 block">Max Layover: {formData.maxStopoverTime}h</label>
+                <input
+                  type="range"
+                  min="1"
+                  max="24"
+                  value={formData.maxStopoverTime}
+                  className="w-full accent-orange-500"
+                  onChange={(e) => setFormData({ ...formData, maxStopoverTime: e.target.value })}
+                />
               </div>
             )}
+          </div>
 
-            <div className="card-brutal p-0 overflow-hidden">
-              {/* Chat Header */}
-              <div className="bg-black/50 border-b border-white/10 p-4 flex items-center gap-3">
-                <div className={`w-3 h-3 rounded-full ${currentUser ? 'bg-brutal-green' : 'bg-red-500'}`} style={{boxShadow: currentUser ? '0 0 6px #00FF85' : '0 0 6px #FF4757'}}></div>
-                <span className="font-mono font-bold text-white">AI Travel Assistant</span>
-
-                <div className="ml-auto flex items-center gap-4">
-                  <span className="text-sm font-mono text-white/40 hidden md:inline">
-                    {preferences.destination && `Destination: ${preferences.destination}`}
-                  </span>
-                  {currentUser ? (
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono text-sm font-bold text-white/90 border-b border-white/30">{currentUser.full_name || currentUser.email}</span>
-                      <button
-                        onClick={async () => {
-                          await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/auth/logout`, { method: 'POST', credentials: 'include' });
-                          setCurrentUser(null);
-                          signOut({ redirect: false });
-                        }}
-                        className="text-xs font-mono text-white/60 hover:text-red-400 underline"
-                      >
-                        LOGOUT
-                      </button>
-                      <button
-                        onClick={async () => {
-                          if (!window.confirm('Delete your account and all saved itineraries? This cannot be undone.')) return
-                          const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/auth/account`, { method: 'DELETE', credentials: 'include' })
-                          if (res.ok) {
-                            setCurrentUser(null)
-                            signOut({ redirect: false })
-                          }
-                        }}
-                        className="text-xs font-mono text-red-400 hover:text-red-300 underline"
-                      >
-                        DELETE
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => setAuthModalOpen(true)}
-                      className="btn-brutal px-2 py-1 text-xs border-glow-orange"
-                    >
-                      LOGIN
-                    </button>
-                  )}
-                </div>
+          {/* 4 & 5. Travelers & Budget */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-2">
+              <label className="text-orange-400 font-black text-xs uppercase">4. Travelers</label>
+              <input
+                type="number"
+                min="1"
+                value={formData.travelers}
+                className="w-full bg-white/5 border border-white/10 p-4 rounded-2xl text-white font-bold outline-none focus:border-orange-500 transition-all"
+                onChange={(e) => setFormData({ ...formData, travelers: parseInt(e.target.value) || 1 })}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-orange-400 font-black text-xs uppercase">5. Budget ($)</label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="Amount"
+                  value={formData.budget}
+                  className="flex-[2] bg-white/5 border border-white/10 p-4 rounded-2xl text-white font-bold outline-none focus:border-orange-500 placeholder:text-white/30 transition-all"
+                  onChange={(e) => setFormData({ ...formData, budget: e.target.value })}
+                />
+                <select
+                  className="flex-1 bg-white/10 border border-white/10 p-4 rounded-2xl text-white text-xs font-bold outline-none"
+                  value={formData.budgetType}
+                  onChange={(e) => setFormData({ ...formData, budgetType: e.target.value })}
+                >
+                  <option value="per-person">/ Pers.</option>
+                  <option value="total">Total</option>
+                </select>
               </div>
+            </div>
+          </div>
 
-              {/* Messages Container */}
-              <div
-                ref={chatContainerRef}
-                className="h-[400px] overflow-y-auto p-4 space-y-4 bg-black/40 scrollbar-hide"
-              >
-                {messages.map((message) => (
-                  <div
-                    key={message.id}
-                    className={`animate-slide-up ${message.role === 'user' ? 'flex justify-end' : 'flex justify-start'
-                      }`}
-                  >
-                    <div
-                      className={
-                        message.role === 'user'
-                          ? 'chat-bubble-user'
-                          : 'chat-bubble-assistant'
-                      }
-                    >
-                      {message.agentSource && message.role === 'assistant' && (
-                        <div className="badge-brutal border-glow-orange mb-2 text-xs text-brutal-orange">
-                          {message.agentSource}
-                        </div>
-                      )}
-                      <p className="whitespace-pre-wrap">{message.content}</p>
-                      <span className="text-xs opacity-50 mt-2 block" suppressHydrationWarning>
-                        {message.timestamp.toLocaleTimeString()}
-                      </span>
-                      {message.uploadedImage && (
-                        <div className="mt-2">
-                          <img src={message.uploadedImage} alt="Uploaded" className="max-h-48 rounded border border-white/20" />
-                        </div>
-                      )}
+          {/* 6. Dining Plans */}
+          <div className="space-y-6">
+            <label className="text-orange-400 font-black text-sm uppercase italic tracking-widest">6. Dining Plans</label>
+            <div className="flex gap-4">
+              {['yes', 'no'].map((opt) => (
+                <button
+                  key={opt}
+                  type="button"
+                  onClick={() => setFormData({ ...formData, eatOutside: opt })}
+                  className={`flex-1 py-4 rounded-2xl font-black transition-all ${
+                    formData.eatOutside === opt
+                      ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/30'
+                      : 'bg-white/5 text-white/40 hover:bg-white/10'
+                  }`}
+                >
+                  {opt === 'yes' ? 'EAT OUTSIDE' : 'NO THANKS'}
+                </button>
+              ))}
+            </div>
 
-                      {message.creativeData && (
-                        <div className="mt-4 w-full space-y-4">
-                          {message.creativeData.poster_url && (
-                            <div className="card-brutal p-2">
-                              <p className="font-bold font-mono mb-1 text-brutal-pink">🎬 Trip Poster</p>
-                              <img src={message.creativeData.poster_url} alt="Trip Poster" className="w-full rounded" />
-                            </div>
-                          )}
-                          {message.creativeData.video_url && (
-                            <div className="card-brutal p-2">
-                              <p className="font-bold font-mono mb-1 text-brutal-purple">🎥 Teaser Trailer</p>
-                              <video controls src={message.creativeData.video_url} className="w-full rounded" />
-                            </div>
-                          )}
-                        </div>
-                      )}
-
-                      {message.itineraryData && (
-                        <div className="mt-4 w-full">
-                          <ItineraryView
-                            itinerary={message.itineraryData.daily_itinerary || message.itineraryData.itinerary}
-                            summary={message.itineraryData}
-                          />
-                          {!savedIds.has(message.id) && (
-                            <button
-                              onClick={() => savePlan(message)}
-                              className="btn-brutal-green mt-3 text-sm"
-                            >
-                              💾 Save This Plan
-                            </button>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ))}
-
-                {/* Loading indicator */}
-                {isLoading && (
-                  <div className="animate-slide-up">
-                    <LoadingExperience />
-                  </div>
-                )}
-              </div>
-
-              {/* Input Area */}
-              <div className="border-t border-white/10 p-4 bg-black/50">
-                <div className="flex flex-col gap-2">
-                  {selectedFile && (
-                    <div className="text-xs bg-black/60 text-brutal-yellow p-1 border border-brutal-yellow/30 inline-block self-start">
-                      📎 {selectedFile.name}
-                      <button onClick={() => setSelectedFile(null)} className="ml-2 text-red-400 font-bold">X</button>
-                    </div>
-                  )}
-                  <div className="flex gap-3">
-                    <input
-                      type="file"
-                      ref={fileInputRef}
-                      className="hidden"
-                      onChange={(e) => {
-                        if (e.target.files?.[0]) setSelectedFile(e.target.files[0])
-                      }}
-                      accept="image/*"
-                    />
-                    <button
-                      className="btn-brutal px-3"
-                      onClick={() => fileInputRef.current?.click()}
-                      title="Upload Image"
-                    >
-                      📎
-                    </button>
-                    <input
-                      ref={inputRef}
-                      type="text"
-                      value={inputValue}
-                      onChange={(e) => setInputValue(e.target.value)}
-                      onKeyDown={handleKeyDown}
-                      placeholder={!isOnline ? "You're offline - chat unavailable" : "Tell me about your dream trip..."}
-                      className="input-brutal flex-1"
-                      disabled={isLoading || !isOnline}
-                    />
-                    <button
-                      onClick={sendMessage}
-                      disabled={isLoading || !isOnline || (!inputValue.trim() && !selectedFile)}
-                      className="btn-brutal-green disabled:opacity-50 disabled:cursor-not-allowed"
-                      title={!isOnline ? "Chat unavailable offline" : "Send message"}
-                    >
-                      {isLoading ? '...' : !isOnline ? '📡' : 'SEND'}
-                    </button>
-                  </div>
-                </div>
-
-                {/* Quick action buttons */}
-                <div className="flex flex-wrap gap-2 mt-3">
-                  {[
-                    'Vegetarian options',
-                    'Budget travel',
-                    'Adventure trip',
-                    'Cultural experience'
-                  ].map((suggestion) => (
-                    <button
-                      key={suggestion}
-                      onClick={() => setInputValue(suggestion)}
-                      className="badge-brutal cursor-pointer hover:bg-white/10 transition-colors text-white/60 hover:text-white"
-                    >
-                      {suggestion}
-                    </button>
+            {formData.eatOutside === 'yes' && (
+              <div className="grid grid-cols-1 gap-4 animate-in zoom-in-95">
+                <select
+                  className="w-full bg-white/10 border border-white/10 p-4 rounded-2xl text-orange-400 font-bold outline-none"
+                  value={formData.dietary}
+                  onChange={(e) => setFormData({ ...formData, dietary: e.target.value })}
+                >
+                  <option value="">Select Dietary...</option>
+                  <option value="vegan">Vegan</option>
+                  <option value="vegetarian">Vegetarian</option>
+                  <option value="halal">Halal</option>
+                  <option value="kosher">Kosher</option>
+                  <option value="gluten-free">Gluten-Free</option>
+                </select>
+                <div className="grid grid-cols-2 gap-3">
+                  {['Breakfast', 'Lunch', 'Dinner', 'Snacks'].map((meal) => (
+                    <label key={meal} className="flex items-center gap-3 p-4 bg-white/5 rounded-2xl border border-white/10 cursor-pointer hover:bg-white/10 transition-all">
+                      <input
+                        type="checkbox"
+                        checked={formData.meals.includes(meal)}
+                        onChange={() => handleMealChange(meal)}
+                        className="w-5 h-5 accent-orange-500"
+                      />
+                      <span className="text-sm font-bold text-white/80">{meal}</span>
+                    </label>
                   ))}
                 </div>
               </div>
-            </div>
+            )}
           </div>
-        </div>
-      </section>
 
-      {/* How It Works Section */}
-      <section id="how-it-works" className="py-16 md:py-24">
-        <div className="container mx-auto px-4">
-          <h2 className="text-4xl font-mono font-bold text-center mb-12">
-            <span className="bg-black/60 backdrop-blur-sm px-4 py-2 border border-brutal-green/40 text-brutal-green" style={{boxShadow:'0 0 16px rgba(0,255,133,0.2)'}}>
-              HOW IT WORKS
-            </span>
-          </h2>
+          {/* Submit Button */}
+          <button
+            type="submit"
+            disabled={loading || !isOnline}
+            className="w-full py-6 rounded-3xl bg-gradient-to-r from-orange-600 to-pink-600 text-white font-black text-xl shadow-2xl shadow-orange-500/30 hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50"
+          >
+            {loading ? 'BREWING YOUR ADVENTURE...' : !isOnline ? 'OFFLINE - CONNECT TO PLAN' : 'GENERATE MY JOURNEY'}
+          </button>
+        </form>
 
-          <div className="max-w-4xl mx-auto">
-            <div className="space-y-8">
-              {/* Step 1 */}
-              <div className="flex gap-6 items-start">
-                <div className="w-16 h-16 bg-black/60 backdrop-blur-sm border border-brutal-yellow/40 flex items-center justify-center font-mono font-bold text-2xl shrink-0 text-brutal-yellow" style={{boxShadow:'0 0 12px rgba(255,225,53,0.25)'}}>
-                  1
-                </div>
-                <div className="card-brutal flex-1">
-                  <h3 className="text-xl font-mono font-bold mb-2 text-brutal-yellow">Share Your Preferences</h3>
-                  <p className="text-white/70">
-                    Tell us about your dietary restrictions, travel style, budget,
-                    and interests. Our Profiler Agent captures everything.
-                  </p>
-                </div>
+        {/* Results */}
+        <AnimatePresence>
+          {showResults && (
+            <motion.div
+              initial={{ opacity: 0, y: 50 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mt-20 space-y-10"
+            >
+              <div className="text-center">
+                <h2 className="text-4xl font-black text-white italic">YOUR TAILORED JOURNEY</h2>
+                <div className="h-1 w-20 bg-gradient-to-r from-orange-500 to-pink-500 mx-auto mt-2 rounded-full" />
               </div>
 
-              {/* Step 2 */}
-              <div className="flex gap-6 items-start">
-                <div className="w-16 h-16 bg-black/60 backdrop-blur-sm border border-brutal-pink/40 flex items-center justify-center font-mono font-bold text-2xl shrink-0 text-brutal-pink" style={{boxShadow:'0 0 12px rgba(255,107,157,0.25)'}}>
-                  2
-                </div>
-                <div className="card-brutal flex-1">
-                  <h3 className="text-xl font-mono font-bold mb-2 text-brutal-pink">AI Agents Collaborate</h3>
-                  <p className="text-white/70">
-                    Five specialized agents work together - analyzing trends,
-                    finding destinations, filtering restaurants, and more.
-                  </p>
-                </div>
+              <TransportBox data={formData} />
+              <FoodBox data={formData} />
+
+              {latestItinerary && (
+                <>
+                  <ItineraryView
+                    itinerary={latestItinerary.daily_itinerary || latestItinerary.itinerary || latestItinerary}
+                    summary={latestItinerary}
+                  />
+                  <button
+                    onClick={() => savePlan(latestItinerary)}
+                    className="w-full py-4 bg-gradient-to-r from-green-500 to-emerald-500 text-white font-black text-lg rounded-2xl shadow-lg shadow-green-500/30 hover:scale-[1.02] active:scale-95 transition-all"
+                  >
+                    💾 SAVE THIS ITINERARY
+                  </button>
+                </>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+
+      {/* Floating Chat Bubble */}
+      <div className="fixed bottom-6 right-6 z-50">
+        <button
+          onClick={() => setIsChatOpen(!isChatOpen)}
+          className="w-16 h-16 bg-gradient-to-r from-orange-500 to-pink-500 rounded-full shadow-2xl shadow-orange-500/40 flex items-center justify-center hover:scale-110 transition-transform active:scale-90"
+        >
+          {isChatOpen ? <span className="text-white text-2xl font-bold">✕</span> : <span className="text-2xl">✈️</span>}
+        </button>
+
+        <AnimatePresence>
+          {isChatOpen && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.8, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.8, y: 20 }}
+              className="absolute bottom-20 right-0 w-[350px] h-[500px] bg-[#0d0d2b] border border-white/20 rounded-[32px] shadow-2xl overflow-hidden flex flex-col backdrop-blur-xl"
+            >
+              <div className="p-4 bg-gradient-to-r from-orange-600 to-pink-600 text-white font-bold flex justify-between items-center">
+                <span>✈️ TRAVEL ASSISTANT</span>
+                <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
               </div>
 
-              {/* Step 3 */}
-              <div className="flex gap-6 items-start">
-                <div className="w-16 h-16 bg-black/60 backdrop-blur-sm border border-brutal-orange/40 flex items-center justify-center font-mono font-bold text-2xl shrink-0 text-brutal-orange" style={{boxShadow:'0 0 12px rgba(0,212,255,0.25)'}}>
-                  3
-                </div>
-                <div className="card-brutal flex-1">
-                  <h3 className="text-xl font-mono font-bold mb-2 text-brutal-orange">Get Your Perfect Plan</h3>
-                  <p className="text-white/70">
-                    Receive a personalized, day-by-day itinerary optimized for
-                    your preferences, with all dietary needs respected.
-                  </p>
+              <div ref={chatContainerRef} className="flex-1 p-4 text-sm space-y-4 overflow-y-auto">
+                {chatMessages.map((m, i) => (
+                  <div
+                    key={i}
+                    className={`p-3 rounded-2xl max-w-[85%] ${
+                      m.role === 'user'
+                        ? 'bg-orange-500 text-white ml-auto rounded-tr-none'
+                        : 'bg-white/10 text-white/80 rounded-tl-none'
+                    }`}
+                  >
+                    {m.text}
+                  </div>
+                ))}
+                {chatLoading && <div className="text-white/50 italic font-mono">Thinking...</div>}
+              </div>
+
+              <div className="p-4 border-t border-white/10 bg-white/5">
+                <div className="flex gap-2">
+                  <input
+                    autoFocus
+                    type="text"
+                    placeholder="Ask me anything..."
+                    value={chatInput}
+                    onChange={(e) => setChatInput(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleChatSubmit()}
+                    className="flex-1 bg-white/5 border border-white/20 p-3 rounded-2xl text-white outline-none focus:border-orange-500 text-sm placeholder:text-white/30"
+                  />
+                  <button
+                    onClick={handleChatSubmit}
+                    disabled={chatLoading}
+                    className="bg-gradient-to-r from-orange-500 to-pink-500 text-white px-4 py-2 rounded-2xl font-bold hover:opacity-90 transition-all disabled:opacity-50"
+                  >
+                    →
+                  </button>
                 </div>
               </div>
-            </div>
-          </div>
-        </div>
-      </section>
-      {/* Auth Modal */}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+
+      {/* Auth Modal - Dark Theme */}
       {authModalOpen && (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
-          <div className="card-brutal max-w-md w-full animate-slide-up relative bg-[rgba(20,20,40,0.92)]">
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-[#0d0d2b] max-w-md w-full rounded-[32px] border border-white/20 shadow-2xl p-8 relative">
             <button
               onClick={() => setAuthModalOpen(false)}
-              className="absolute top-2 right-2 text-xl font-bold text-white/60 hover:text-brutal-pink"
+              className="absolute top-4 right-4 text-2xl text-white/40 hover:text-white transition-colors"
             >
               ✕
             </button>
-            <h2 className="text-2xl font-mono font-bold mb-6 text-center text-white">
+
+            <h2 className="text-3xl font-black text-white mb-6 text-center">
               {isLoginMode ? 'WELCOME BACK' : 'JOIN THE TRIP'}
             </h2>
 
             <form onSubmit={handleAuth} className="space-y-4">
               {!isLoginMode && (
                 <div>
-                  <label className="block font-mono font-bold text-sm mb-1 text-white/70">FULL NAME</label>
+                  <label className="block font-bold text-sm mb-1 text-white/60">FULL NAME</label>
                   <input
                     type="text"
                     required={!isLoginMode}
                     value={authName}
                     onChange={e => setAuthName(e.target.value)}
-                    className="input-brutal w-full"
+                    className="w-full bg-white/5 border border-white/20 p-3 rounded-xl text-white font-mono outline-none focus:border-orange-500 placeholder:text-white/30"
                     placeholder="John Doe"
                   />
                 </div>
               )}
 
               <div>
-                <label className="block font-mono font-bold text-sm mb-1 text-white/70">EMAIL</label>
+                <label className="block font-bold text-sm mb-1 text-white/60">EMAIL</label>
                 <input
                   type="email"
                   required
                   value={authEmail}
                   onChange={e => setAuthEmail(e.target.value)}
-                  className="input-brutal w-full"
+                  className="w-full bg-white/5 border border-white/20 p-3 rounded-xl text-white font-mono outline-none focus:border-orange-500 placeholder:text-white/30"
                   placeholder="traveler@example.com"
                 />
               </div>
 
               <div>
-                <label className="block font-mono font-bold text-sm mb-1 text-white/70">PASSWORD</label>
+                <label className="block font-bold text-sm mb-1 text-white/60">PASSWORD</label>
                 <input
                   type="password"
                   required
                   value={authPassword}
                   onChange={e => setAuthPassword(e.target.value)}
-                  className="input-brutal w-full"
+                  className="w-full bg-white/5 border border-white/20 p-3 rounded-xl text-white font-mono outline-none focus:border-orange-500 placeholder:text-white/30"
                   placeholder="••••••••"
                 />
               </div>
 
               {authError && (
-                <div className="bg-red-900/30 border border-red-500/50 text-red-400 p-2 font-mono text-xs">
+                <div className="bg-red-500/20 border border-red-500/50 text-red-400 p-3 font-mono text-sm rounded-xl">
                   {authError}
                 </div>
               )}
 
-              <button type="submit" className="btn-brutal-yellow w-full">
+              <button
+                type="submit"
+                className="w-full py-4 bg-gradient-to-r from-orange-500 to-pink-500 text-white font-black text-lg rounded-xl hover:opacity-90 transition-all"
+              >
                 {isLoginMode ? 'LOGIN' : 'REGISTER'}
               </button>
             </form>
 
-            <div className="my-6 flex items-center gap-2 opacity-40">
-              <div className="h-px bg-white flex-1"></div>
-              <span className="font-mono text-xs text-white">OR</span>
-              <div className="h-px bg-white flex-1"></div>
+            <div className="my-6 flex items-center gap-2">
+              <div className="h-px bg-white/20 flex-1"></div>
+              <span className="font-mono text-xs text-white/40">OR</span>
+              <div className="h-px bg-white/20 flex-1"></div>
             </div>
 
             <button
               onClick={() => signIn('google')}
-              className="btn-brutal w-full flex items-center justify-center gap-2 border-glow-orange"
+              className="w-full py-3 bg-white/10 border border-white/20 rounded-xl flex items-center justify-center gap-2 font-bold text-white hover:bg-white/20 transition-all"
             >
               <svg className="w-5 h-5" viewBox="0 0 24 24">
                 <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
@@ -905,7 +743,7 @@ Just type your preferences and I'll create a personalized travel plan for you!`,
             <div className="mt-4 text-center">
               <button
                 onClick={() => setIsLoginMode(!isLoginMode)}
-                className="text-sm font-mono underline text-white/60 hover:text-brutal-pink"
+                className="text-sm font-mono underline text-white/50 hover:text-orange-400 transition-colors"
               >
                 {isLoginMode ? 'Need an account? Register' : 'Already have an account? Login'}
               </button>
@@ -913,6 +751,37 @@ Just type your preferences and I'll create a personalized travel plan for you!`,
           </div>
         </div>
       )}
-    </div>
+    </main>
   )
+}
+
+// Dark theme styles for react-select
+const darkSelectStyles = {
+  control: (base: any) => ({
+    ...base,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    border: '1px solid rgba(255, 255, 255, 0.1)',
+    borderRadius: '16px',
+    padding: '4px',
+    color: 'white',
+    boxShadow: 'none',
+    '&:hover': { border: '1px solid rgba(255, 255, 255, 0.3)' }
+  }),
+  menu: (base: any) => ({
+    ...base,
+    backgroundColor: '#0a0a2e',
+    border: '1px solid rgba(255, 255, 255, 0.1)',
+    borderRadius: '16px',
+    overflow: 'hidden'
+  }),
+  option: (base: any, state: any) => ({
+    ...base,
+    backgroundColor: state.isFocused ? 'rgba(255, 165, 0, 0.2)' : 'transparent',
+    color: 'white',
+    fontSize: '14px',
+    cursor: 'pointer'
+  }),
+  singleValue: (base: any) => ({ ...base, color: 'white', fontWeight: 'bold' }),
+  input: (base: any) => ({ ...base, color: 'white' }),
+  placeholder: (base: any) => ({ ...base, color: 'rgba(255,255,255,0.3)' })
 }

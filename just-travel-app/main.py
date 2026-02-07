@@ -79,14 +79,35 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 # --- Startup Event ---
 @app.on_event("startup")
 async def on_startup():
+    # Validate required environment variables in production
+    if os.getenv("ENV") == "production":
+        required_vars = ["GOOGLE_API_KEY", "NEXTAUTH_SECRET"]
+        missing = [var for var in required_vars if not os.getenv(var)]
+        if missing:
+            raise RuntimeError(f"Missing required environment variables: {', '.join(missing)}")
+        logger.info("Production environment validated")
+
     await init_db()
     await init_redis()  # Initialize Redis for background tasks
+    logger.info("Startup complete - database and Redis initialized")
 
-# --- CORS Setup ---
-origins = [
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-]
+# --- Shutdown Event ---
+@app.on_event("shutdown")
+async def on_shutdown():
+    """Graceful shutdown - close Redis connection."""
+    try:
+        from tasks import redis_client
+        if redis_client:
+            await redis_client.close()
+            logger.info("Redis connection closed gracefully")
+    except Exception as e:
+        logger.warning(f"Error closing Redis connection: {e}")
+
+# --- CORS Setup (dynamic from environment) ---
+CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000")
+origins = [origin.strip() for origin in CORS_ORIGINS.split(",")]
+logger.info(f"CORS origins configured: {origins}")
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
@@ -199,18 +220,21 @@ async def get_optional_user(
     result = await session.execute(statement)
     return result.scalars().first()
 
+# Determine if running in production (for secure cookies)
+IS_PRODUCTION = os.getenv("ENV", "development") == "production"
+
 def _set_auth_cookies(response: Response, email: str):
     """Set access and refresh token cookies on a response."""
     access_token = create_access_token({"sub": email})
     refresh_token = create_refresh_token({"sub": email})
     response.set_cookie(
         key="access_token", value=access_token,
-        httponly=True, samesite="lax", secure=False,
+        httponly=True, samesite="lax", secure=IS_PRODUCTION,
         max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60
     )
     response.set_cookie(
         key="refresh_token", value=refresh_token,
-        httponly=True, samesite="lax", secure=False,
+        httponly=True, samesite="lax", secure=IS_PRODUCTION,
         max_age=REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60
     )
 
@@ -513,8 +537,47 @@ async def delete_account(
     return {"message": "Account deleted"}
 
 @app.get("/api/health")
-async def health_check():
-    return {"status": "online", "manager": "AntigravityAgentManager"}
+async def health_check(session: AsyncSession = Depends(get_session)):
+    """
+    Enhanced health check that verifies all critical dependencies.
+    Returns degraded status if any dependency is unhealthy.
+    """
+    from sqlalchemy import text
+
+    status = "online"
+    checks = {}
+
+    # Check database connectivity
+    try:
+        await session.execute(text("SELECT 1"))
+        checks["database"] = "ok"
+    except Exception as e:
+        checks["database"] = f"error: {str(e)}"
+        status = "degraded"
+
+    # Check Redis connectivity
+    try:
+        from tasks import redis_client
+        if redis_client:
+            await redis_client.ping()
+            checks["redis"] = "ok"
+        else:
+            checks["redis"] = "not_initialized"
+    except Exception as e:
+        checks["redis"] = f"error: {str(e)}"
+        status = "degraded"
+
+    # Check if critical API keys are configured
+    checks["google_api"] = "configured" if os.getenv("GOOGLE_API_KEY") else "missing"
+    if checks["google_api"] == "missing":
+        status = "degraded"
+
+    return {
+        "status": status,
+        "manager": "AntigravityAgentManager",
+        "checks": checks,
+        "environment": os.getenv("ENV", "development")
+    }
 
 @app.post("/api/chat", response_model=AgentResponse)
 @limiter.limit("5/minute")
