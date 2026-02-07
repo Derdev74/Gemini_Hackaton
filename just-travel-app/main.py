@@ -88,8 +88,14 @@ async def on_startup():
         logger.info("Production environment validated")
 
     await init_db()
-    await init_redis()  # Initialize Redis for background tasks
-    logger.info("Startup complete - database and Redis initialized")
+
+    # Initialize Redis (optional - gracefully skip for Cloud Run without Redis)
+    try:
+        await init_redis()
+        logger.info("Startup complete - database and Redis initialized")
+    except Exception as e:
+        logger.warning(f"Redis not available: {e}. Background media generation disabled.")
+        logger.info("Startup complete - database initialized (Redis skipped)")
 
 # --- Shutdown Event ---
 @app.on_event("shutdown")

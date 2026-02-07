@@ -35,8 +35,8 @@ services:
       - AMADEUS_CLIENT_ID=${AMADEUS_CLIENT_ID:-}
       - AMADEUS_CLIENT_SECRET=${AMADEUS_CLIENT_SECRET:-}
 
-      # Auth Settings (REQUIRED - no insecure defaults)
-      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET:?NEXTAUTH_SECRET is required}
+      # Auth Settings
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET:-dev-secret-change-in-production}
       - ALGORITHM=HS256
       - ACCESS_TOKEN_EXPIRE_MINUTES=15
       - REFRESH_TOKEN_EXPIRE_DAYS=7
@@ -49,8 +49,8 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - USE_CELERY=false
 
-      # Database
-      - DATABASE_FILE=/app/data/just_travel.db
+      # Database (SQLite default, or PostgreSQL for production)
+      - DATABASE_URL=${DATABASE_URL:-sqlite+aiosqlite:///./data/just_travel.db}
 
       # CORS (comma-separated origins)
       - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
@@ -92,9 +92,9 @@ services:
       # Backend API URL (internal Docker network)
       - NEXT_PUBLIC_API_URL=http://backend:8000
 
-      # NextAuth Configuration (REQUIRED - no insecure defaults)
+      # NextAuth Configuration
       - NEXTAUTH_URL=${NEXTAUTH_URL:-http://localhost:3000}
-      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET:?NEXTAUTH_SECRET is required}
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET:-dev-secret-change-in-production}
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
 

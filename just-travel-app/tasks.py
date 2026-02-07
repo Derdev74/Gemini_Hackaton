@@ -24,11 +24,18 @@ redis_client: Optional[aioredis.Redis] = None
 
 
 async def init_redis():
-    """Initialize Redis connection."""
+    """Initialize Redis connection. Gracefully skips if REDIS_URL not configured."""
     global redis_client
+
+    # Skip if REDIS_URL not set (Cloud Run without Redis)
+    redis_url = os.getenv("REDIS_URL")
+    if not redis_url:
+        logger.info("ℹ️  REDIS_URL not set - background tasks disabled")
+        return
+
     if redis_client is None:
         redis_client = await aioredis.from_url(
-            REDIS_URL,
+            redis_url,
             encoding="utf-8",
             decode_responses=True
         )

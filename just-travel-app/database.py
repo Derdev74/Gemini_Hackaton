@@ -1,4 +1,5 @@
 
+import os
 import uuid
 import logging
 from typing import Optional, List, Dict, Any
@@ -11,10 +12,10 @@ from sqlalchemy import JSON, Column
 # Configure logging
 logger = logging.getLogger(__name__)
 
-# Database Configuration
-DATABASE_FILE = "just_travel.db"
-# Use absolute path for safety if needed, but ./ works for tasks usually
-DATABASE_URL = f"sqlite+aiosqlite:///./{DATABASE_FILE}"
+# Database Configuration - configurable via environment variable
+# SQLite: sqlite+aiosqlite:///./just_travel.db
+# PostgreSQL: postgresql+asyncpg://user:pass@host:5432/dbname
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./just_travel.db")
 
 # --- Data Models ---
 
