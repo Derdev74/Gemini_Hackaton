@@ -1,7 +1,6 @@
 /**
  * InstallPrompt - PWA installation prompt
- * Shows after 3 seconds if not previously dismissed
- * Note: iOS Safari doesn't support beforeinstallprompt (manual installation only)
+ * Neo-brutalist style matching header design
  */
 
 'use client'
@@ -80,26 +79,26 @@ export default function InstallPrompt() {
 
   return (
     <div className="fixed bottom-6 right-6 z-50 max-w-sm">
-      <div className="card-brutal bg-brutal-dark/95 backdrop-blur-md border-brutal-orange p-6 shadow-glow-orange">
+      <div className="bg-brutal-yellow p-6 rounded-2xl border-4 border-brutal-black shadow-brutal-lg">
         <div className="flex items-start gap-4">
           <div className="text-4xl">✈️</div>
           <div className="flex-1">
-            <h3 className="text-lg font-bold text-brutal-orange mb-2">
+            <h3 className="text-lg font-mono font-bold text-brutal-black mb-2 uppercase">
               Install Just Travel
             </h3>
-            <p className="text-sm text-brutal-text/80 mb-4">
+            <p className="text-sm text-gray-700 mb-4">
               Add to home screen for quick access and offline itineraries!
             </p>
             <div className="flex gap-3">
               <button
                 onClick={handleInstall}
-                className="btn-brutal bg-brutal-orange text-white px-4 py-2 text-sm font-bold hover:scale-105 transition-transform"
+                className="bg-brutal-orange text-white px-4 py-2 text-sm font-mono font-bold border-2 border-brutal-black shadow-brutal hover:shadow-brutal-hover hover:translate-x-[2px] hover:translate-y-[2px] transition-all"
               >
                 Install
               </button>
               <button
                 onClick={handleDismiss}
-                className="btn-brutal bg-brutal-dark border-brutal-text/30 text-brutal-text/70 px-4 py-2 text-sm hover:scale-105 transition-transform"
+                className="bg-brutal-white text-brutal-black px-4 py-2 text-sm font-mono font-bold border-2 border-brutal-black shadow-brutal hover:shadow-brutal-hover hover:translate-x-[2px] hover:translate-y-[2px] transition-all"
               >
                 Not Now
               </button>

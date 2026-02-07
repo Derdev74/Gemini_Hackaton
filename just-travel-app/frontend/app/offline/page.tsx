@@ -12,17 +12,17 @@ export default function OfflinePage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4">
-      <div className="card-brutal bg-brutal-dark/80 backdrop-blur-xl border-brutal-orange p-12 text-center max-w-md shadow-glow-orange">
+      <div className="bg-white/[0.03] backdrop-blur-3xl rounded-[40px] border border-white/10 p-12 text-center max-w-md shadow-2xl">
         {/* Airplane Icon */}
         <div className="text-8xl mb-8 animate-bounce">✈️</div>
 
         {/* Title */}
-        <h1 className="text-4xl font-black text-brutal-orange mb-4 uppercase tracking-wider">
+        <h1 className="text-4xl font-black text-orange-400 mb-4 uppercase tracking-wider">
           You're Offline
         </h1>
 
         {/* Message */}
-        <p className="text-brutal-text/80 text-lg mb-8">
+        <p className="text-white/70 text-lg mb-8">
           No internet connection detected. Your saved itineraries are still available!
         </p>
 
@@ -30,21 +30,21 @@ export default function OfflinePage() {
         <div className="flex flex-col gap-4">
           <button
             onClick={handleRetry}
-            className="btn-brutal bg-brutal-orange text-white px-6 py-3 text-lg font-bold hover:scale-105 transition-transform"
+            className="bg-gradient-to-r from-orange-500 to-pink-500 text-white px-6 py-3 text-lg font-bold rounded-full hover:scale-105 transition-transform shadow-lg shadow-orange-500/25"
           >
             TRY AGAIN
           </button>
 
           <a
             href="/my-itineraries"
-            className="btn-brutal bg-brutal-dark border-brutal-orange text-brutal-orange px-6 py-3 text-lg font-bold hover:scale-105 transition-transform"
+            className="bg-white/5 border border-white/10 text-orange-400 px-6 py-3 text-lg font-bold rounded-full hover:scale-105 transition-transform hover:bg-white/10"
           >
             VIEW SAVED TRIPS
           </a>
 
           <a
             href="/"
-            className="text-brutal-text/60 hover:text-brutal-orange transition-colors mt-2"
+            className="text-white/50 hover:text-orange-400 transition-colors mt-2"
           >
             Go to Home
           </a>

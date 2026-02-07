@@ -22,12 +22,18 @@ module.exports = {
         'background': '#0a0a2e',  // Updated from #0f0f23
       },
       boxShadow: {
-        'brutal': '0 4px 24px rgba(0,0,0,0.4), 0 0 1px rgba(255,255,255,0.08)',
-        'brutal-lg': '0 8px 40px rgba(0,0,0,0.5), 0 0 20px rgba(255,159,67,0.12)',  // Orange glow
-        'brutal-xl': '0 12px 48px rgba(0,0,0,0.6), 0 0 30px rgba(255,159,67,0.08)',  // Orange glow
-        'brutal-hover': '0 2px 12px rgba(0,0,0,0.3), 0 0 8px rgba(255,159,67,0.2)',  // Orange glow
-        'glow-orange': '0 0 15px rgba(249,115,22,0.5)',  // Neon orange glow
-        'glow-pink': '0 0 15px rgba(255,107,157,0.5)',  // Neon pink glow
+        // Neo-brutalist hard shadows
+        'brutal': '4px 4px 0px 0px #000000',
+        'brutal-lg': '8px 8px 0px 0px #000000',
+        'brutal-xl': '12px 12px 0px 0px #000000',
+        'brutal-hover': '2px 2px 0px 0px #000000',
+        // Soft shadows with glow
+        'brutal-soft': '0 4px 24px rgba(0,0,0,0.4), 0 0 1px rgba(255,255,255,0.08)',
+        'brutal-soft-lg': '0 8px 40px rgba(0,0,0,0.5), 0 0 20px rgba(255,159,67,0.12)',
+        // Neon glow effects
+        'glow-orange': '0 0 15px rgba(249,115,22,0.5)',
+        'glow-pink': '0 0 15px rgba(255,107,157,0.5)',
+        'glow-yellow': '0 0 15px rgba(255,225,53,0.5)',
       },
       borderWidth: {
         '3': '3px',

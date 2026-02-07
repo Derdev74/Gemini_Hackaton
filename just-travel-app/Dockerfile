@@ -22,8 +22,15 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY . .
 
-# Create directory for SQLite database if it doesn't exist
-RUN mkdir -p /app/data
+# Create directory for SQLite database and uploads
+RUN mkdir -p /app/data /app/uploads
+
+# Create non-root user for security
+RUN useradd -m -u 1001 appuser && \
+    chown -R appuser:appuser /app
+
+# Switch to non-root user
+USER appuser
 
 # Expose port
 EXPOSE 8000
