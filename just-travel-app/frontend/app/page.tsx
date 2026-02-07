@@ -333,7 +333,7 @@ ${formData.eatOutside === 'yes' ? `Dining: ${formData.dietary || 'Standard'}, me
         {currentUser ? (
           <div className="flex items-center gap-3 bg-white/5 backdrop-blur-xl border border-white/10 px-4 py-2 rounded-full">
             <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></div>
-            <span className="font-mono text-sm text-white/80">{currentUser.full_name || currentUser.email}</span>
+            <span className="font-black text-sm text-white/80">{currentUser.full_name || currentUser.email}</span>
             <button
               onClick={async () => {
                 await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/auth/logout`, {
@@ -343,7 +343,7 @@ ${formData.eatOutside === 'yes' ? `Dining: ${formData.dietary || 'Standard'}, me
                 setCurrentUser(null)
                 signOut({ redirect: false })
               }}
-              className="text-xs font-mono text-white/50 hover:text-orange-400 transition-colors"
+              className="text-xs font-black text-white/50 hover:text-orange-400 transition-colors"
             >
               Logout
             </button>
@@ -359,7 +359,7 @@ ${formData.eatOutside === 'yes' ? `Dining: ${formData.dietary || 'Standard'}, me
                   signOut({ redirect: false })
                 }
               }}
-              className="text-xs font-mono text-red-400/70 hover:text-red-400 transition-colors"
+              className="text-xs font-black text-red-400/70 hover:text-red-400 transition-colors"
             >
               Delete
             </button>
@@ -367,7 +367,7 @@ ${formData.eatOutside === 'yes' ? `Dining: ${formData.dietary || 'Standard'}, me
         ) : (
           <button
             onClick={() => setAuthModalOpen(true)}
-            className="bg-gradient-to-r from-orange-500 to-pink-500 text-white font-mono font-bold text-sm px-5 py-2.5 rounded-full hover:opacity-90 transition-all shadow-lg shadow-orange-500/25"
+            className="bg-gradient-to-r from-orange-500 to-pink-500 text-white font-black font-bold text-sm px-5 py-2.5 rounded-full hover:opacity-90 transition-all shadow-lg shadow-orange-500/25"
           >
             Login / Signup
           </button>

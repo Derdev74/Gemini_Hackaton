@@ -108,9 +108,16 @@ if not USE_CELERY:
                     itinerary = db_result.scalar_one_or_none()
 
                     if itinerary:
-                        itinerary.poster_url = result.get("poster_url")
-                        itinerary.video_url = result.get("video_url")
+                        # Store trip poster (main poster) for backward compatibility
+                        itinerary.poster_url = result.get("trip_poster_url") or result.get("poster_url", "")
+                        itinerary.video_url = result.get("video_url", "")
                         itinerary.media_status = "completed"
+                        # Store all creative assets including daily posters in JSON field
+                        itinerary.creative_assets = {
+                            "trip_poster_url": result.get("trip_poster_url", ""),
+                            "daily_posters": result.get("daily_posters", []),
+                            "video_url": result.get("video_url", "")
+                        }
                         session.add(itinerary)
                         await session.commit()
                         logger.info(f"✅ Updated database for itinerary {itinerary.id} (task {task_id})")
@@ -176,9 +183,16 @@ else:
                         itinerary = db_result.scalar_one_or_none()
 
                         if itinerary:
-                            itinerary.poster_url = result.get("poster_url")
-                            itinerary.video_url = result.get("video_url")
+                            # Store trip poster (main poster) for backward compatibility
+                            itinerary.poster_url = result.get("trip_poster_url") or result.get("poster_url", "")
+                            itinerary.video_url = result.get("video_url", "")
                             itinerary.media_status = "completed"
+                            # Store all creative assets including daily posters
+                            itinerary.creative_assets = {
+                                "trip_poster_url": result.get("trip_poster_url", ""),
+                                "daily_posters": result.get("daily_posters", []),
+                                "video_url": result.get("video_url", "")
+                            }
                             session.add(itinerary)
                             await session.commit()
                             logger.info(f"✅ Updated database for itinerary {itinerary.id}")

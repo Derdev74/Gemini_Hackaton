@@ -77,51 +77,134 @@ class OptimizerAgent(BaseAgent):
                 logger.warning(f"Weather fetch failed for '{dest_city}': {e}")
 
         prompt = f"""
-        You are the Master Travel Planner. Create a detailed, logical itinerary.
+        You are the Master Travel Planner. Create a COMPLETE trip plan from departure to return.
 
         User Query: "{query}"
         Profile: {json.dumps(profile, default=str)}
 
-        Research Data:
-        - Top Destinations Found: {self._summarize_list(destinations, 'name')}
-        - Accommodations/Restaurants: {self._summarize_list(accommodations, 'name')}
+        Research Data (USE THIS TO BUILD THE PLAN):
+        - Flights/Transport: {json.dumps(self._extract_flights(destinations), default=str)}
+        - Accommodations: {json.dumps(accommodations[:5], default=str)}
+        - Restaurants: {json.dumps(self._extract_restaurants(accommodations), default=str)}
+        - Attractions: {self._summarize_list(destinations, 'name')}
         - Viral Trends: {self._summarize_list(trends, 'title')}
 
         {weather_section}
 
         {self._format_flight_intelligence(amadeus_intel)}
 
-        Constraints:
-        - Create a valid daily schedule.
-        - Respect opening times if known (or assume standard 9am-5pm for museums, evening for dinner).
-        - Group locations logically by geography to minimize travel time.
-        - Include "estimated_cost" and "total_travel_time" estimates.
-        - If the weather forecast shows rain, storms, or extreme temperatures on a given day,
-          avoid scheduling outdoor activities (hiking, swimming, cycling, beach visits) on that day.
-          Replace them with indoor alternatives and add a note referencing the weather.
+        REQUIREMENTS:
+        1. Day 1 MUST start with arrival (flight landing, airport transfer, hotel check-in)
+        2. Last day MUST end with departure (hotel checkout, airport transfer, flight)
+        3. Each day includes: breakfast or brunch, activities, lunch, activities, dinner
+        4. Include transport between all locations
+        5. Group activities by geography to minimize travel time
+        6. Respect weather forecast (no outdoor activities in rain/storms)
+        7. Respect opening times (museums 9am-5pm, restaurants for meals)
 
         Output JSON Schema ONLY:
         {{
-            "summary": "Brief exciting narrative summary of the trip",
+            "summary": "Exciting narrative of the journey",
+            "trip_title": "Catchy title (e.g., '5 Days in Paris')",
+            "trip_visual_theme": "Visual mood for poster (e.g., 'Romance in the City of Lights')",
+
+            "flights": {{
+                "outbound": {{
+                    "airline": "Airline Name",
+                    "flight_number": "XX123",
+                    "departure_airport": "JFK",
+                    "arrival_airport": "CDG",
+                    "departure_time": "2026-02-08T18:00",
+                    "arrival_time": "2026-02-09T07:30",
+                    "price_estimate": 450
+                }},
+                "return": {{
+                    "airline": "Airline Name",
+                    "flight_number": "XX456",
+                    "departure_airport": "CDG",
+                    "arrival_airport": "JFK",
+                    "departure_time": "2026-02-13T10:00",
+                    "arrival_time": "2026-02-13T13:30",
+                    "price_estimate": 420
+                }}
+            }},
+
+            "accommodation": {{
+                "name": "Hotel Name",
+                "type": "hotel",
+                "address": "Full address",
+                "check_in": "2026-02-09",
+                "check_out": "2026-02-13",
+                "price_per_night": 180,
+                "total_nights": 4,
+                "notes": "Description"
+            }},
+
             "daily_itinerary": [
                 {{
                     "day_number": 1,
                     "date": "YYYY-MM-DD",
-                    "theme": "Culture & Food",
+                    "theme": "Arrival & First Impressions",
+                    "daily_highlight": "Most photogenic moment",
+                    "visual_theme": "Mood for poster (e.g., 'Golden evening lights')",
+                    "key_locations": ["Airport", "Hotel", "Main Attraction"],
                     "estimated_cost": 150,
+                    "total_travel_time": 90,
                     "time_slots": [
                         {{
+                            "start_time": "07:30",
+                            "end_time": "09:00",
+                            "activity_type": "arrival",
+                            "activity": {{ "name": "Land at Airport", "type": "flight_arrival" }},
+                            "location": "Airport Name",
+                            "notes": "Collect luggage"
+                        }},
+                        {{
                             "start_time": "09:00",
+                            "end_time": "10:00",
+                            "activity_type": "transport",
+                            "activity": {{ "name": "Airport Transfer", "type": "taxi", "price_level": 2 }},
+                            "location": "Airport → Hotel",
+                            "notes": "45 min by taxi"
+                        }},
+                        {{
+                            "start_time": "10:00",
                             "end_time": "11:00",
+                            "activity_type": "accommodation",
+                            "activity": {{ "name": "Hotel Check-in", "type": "check_in" }},
+                            "location": "Hotel Name",
+                            "notes": "Drop luggage"
+                        }},
+                        {{
+                            "start_time": "12:30",
+                            "end_time": "14:00",
+                            "activity_type": "meal",
+                            "activity": {{ "name": "Restaurant Name", "type": "lunch", "cuisine": "Local", "price_level": 2 }},
+                            "location": "Restaurant Address",
+                            "notes": "Try the local specialty"
+                        }},
+                        {{
+                            "start_time": "15:00",
+                            "end_time": "18:00",
                             "activity_type": "attraction",
-                            "activity": {{ "name": "Louvre Museum", ... }},
-                            "location": "Paris",
-                            "notes": "Buy tickets in advance."
+                            "activity": {{ "name": "Main Attraction", "type": "museum", "price_level": 2 }},
+                            "location": "Attraction Address",
+                            "notes": "Book tickets in advance"
+                        }},
+                        {{
+                            "start_time": "19:30",
+                            "end_time": "21:30",
+                            "activity_type": "meal",
+                            "activity": {{ "name": "Dinner Restaurant", "type": "dinner", "cuisine": "Local", "price_level": 3 }},
+                            "location": "Restaurant Address",
+                            "notes": "Reservation recommended"
                         }}
                     ]
                 }}
             ]
         }}
+
+        IMPORTANT: Last day must include checkout and departure activities.
         """
         
         response_text = await self.generate_response(prompt, context=context)
@@ -203,3 +286,24 @@ class OptimizerAgent(BaseAgent):
             return ""
 
         return "Flight Intelligence (for your money-saving suggestions):\n" + "\n".join(sections)
+
+    def _extract_flights(self, destinations) -> list:
+        """Extract flight data from Pathfinder results."""
+        flights = []
+        if isinstance(destinations, dict):
+            flights = destinations.get("flights", [])
+        elif isinstance(destinations, list):
+            for d in destinations:
+                if isinstance(d, dict) and "flights" in d:
+                    flights.extend(d.get("flights", []))
+        return flights[:3]  # Top 3 flight options
+
+    def _extract_restaurants(self, accommodations: list) -> list:
+        """Extract restaurant recommendations from Concierge results."""
+        restaurants = []
+        for item in accommodations:
+            if isinstance(item, dict):
+                item_type = str(item.get("type", "")).lower()
+                if "restaurant" in item_type or "cafe" in item_type or "dining" in item_type:
+                    restaurants.append(item)
+        return restaurants[:10]

@@ -71,12 +71,12 @@ export default function RootLayout({
           <InstallPrompt />
 
           {/* Modern Dark Header */}
-          <header className="sticky top-0 z-50 bg-black/80 backdrop-blur-xl border-b border-white/10">
+          <header className="sticky top-0 z-50 bg-transparent backdrop-blur-xl border-b border-white/10">
             <nav className="container mx-auto px-4 py-4">
               <div className="flex items-center justify-between">
                 {/* Logo */}
                 <a href="/" className="no-underline">
-                  <h1 className="text-2xl md:text-3xl font-mono font-bold tracking-tight">
+                  <h1 className="text-2xl md:text-3xl font-black font-bold tracking-tight">
                     <span className="text-white">JUST</span>
                     <span className="text-orange-400 ml-1">TRAVEL</span>
                   </h1>
@@ -86,13 +86,13 @@ export default function RootLayout({
                 <div className="hidden md:flex items-center gap-6">
                   <a
                     href="/my-itineraries"
-                    className="font-mono font-bold uppercase text-sm text-white/70 no-underline hover:text-orange-400 transition-colors"
+                    className="font-black font-bold uppercase text-sm text-white/70 no-underline hover:text-orange-400 transition-colors"
                   >
                     My Trips
                   </a>
                   <a
                     href="#plan"
-                    className="bg-gradient-to-r from-orange-500 to-pink-500 text-white font-mono font-bold text-sm px-5 py-2.5 rounded-full hover:opacity-90 transition-all no-underline shadow-lg shadow-orange-500/25"
+                    className="bg-gradient-to-r from-orange-500 to-pink-500 text-white font-black font-bold text-sm px-5 py-2.5 rounded-full hover:opacity-90 transition-all no-underline shadow-lg shadow-orange-500/25"
                   >
                     Start Planning
                   </a>
@@ -114,12 +114,12 @@ export default function RootLayout({
           </main>
 
           {/* Modern Dark Footer */}
-          <footer className="bg-black/90 backdrop-blur-xl text-white/70 border-t border-white/10">
+          <footer className="bg-transparent backdrop-blur-xl text-white/70 border-t border-white/10">
             <div className="container mx-auto px-4 py-8">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                 {/* Brand column */}
                 <div>
-                  <h2 className="text-xl font-mono font-bold mb-4">
+                  <h2 className="text-xl font-black font-bold mb-4">
                     <span className="text-white">JUST</span> <span className="text-orange-400">TRAVEL</span>
                   </h2>
                   <p className="text-sm text-white/50">
@@ -130,7 +130,7 @@ export default function RootLayout({
 
                 {/* Quick links */}
                 <div>
-                  <h3 className="text-lg font-mono font-bold mb-4 text-orange-400">
+                  <h3 className="text-lg font-black font-bold mb-4 text-orange-400">
                     Quick Links
                   </h3>
                   <ul className="space-y-2 text-sm">
@@ -149,7 +149,7 @@ export default function RootLayout({
 
                 {/* Contact */}
                 <div>
-                  <h3 className="text-lg font-mono font-bold mb-4 text-orange-400">
+                  <h3 className="text-lg font-black font-bold mb-4 text-orange-400">
                     Connect
                   </h3>
                   <p className="text-sm text-white/50 mb-2">
