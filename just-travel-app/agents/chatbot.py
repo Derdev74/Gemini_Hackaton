@@ -48,31 +48,36 @@ class ChatbotAgent(BaseAgent):
             Summarize the new plan briefly and tell them you've updated their view.
             """
             final_text = await self.generate_response(reassurance_prompt)
-            return {"text": final_text, "data": new_itinerary, "type": "optimization_update"}
+            # Wrap itinerary in {"itinerary": ...} to match frontend expectations
+            return {"text": final_text, "data": {"itinerary": new_itinerary}, "type": "optimization_update"}
 
         else:
             # 3. JUST REASSURE
             logger.info("Chatbot is providing standard reassurance.")
+
+            # Include existing itinerary context for reference
+            existing_itinerary = context.get('existing_itinerary')
+            itinerary_summary = ""
+            if existing_itinerary:
+                trip_title = existing_itinerary.get('trip_title', 'Your Trip')
+                destination = existing_itinerary.get('destination', 'your destination')
+                itinerary_summary = f"Current trip: {trip_title} to {destination}"
+
             chat_prompt = f"""
             User Query: "{user_query}"
-            Context: {json.dumps(context.get('profile', {}))}
-            
-            You are a kind, empathetic travel expert. 
-            Answer their question and specifically address the anxiety of a first-time traveler. 
-            Use phrases like "It's totally normal to wonder about that" or "I've got your back."
-            """
-            REASSURANCE_PROMPT = """
-            You are the 'Just Travel' Lead Concierge. Your specialty is supporting first-time 
-            international travelers who are anxious about planning.
+            Profile: {json.dumps(context.get('profile', {}))}
+            {itinerary_summary}
 
-            YOUR RULES:
-            1. ACKNOWLEDGE EMOTION: If a user sounds worried, start with: "It's totally normal 
-            to feel overwhelmed by [X]."
-            2. SIMPLIFY: Break down complex travel jargon (like 'layovers' or 'VAT refunds').
-            3. THE HANDOFF: If you need to change the itinerary, say: "I'm asking our 
-            Optimization Engine to crunch the numbers to keep you safe and on budget."
-            4. DIETARY SAFETY: If they mention food allergies, be extra protective. 
-            "I'll make sure we find spots where you don't have to worry about [Allergy]."
+            You are a kind, empathetic travel expert.
+            Answer their question and specifically address the anxiety of a first-time traveler.
+            Use phrases like "It's totally normal to wonder about that" or "I've got your back."
+            If the user has an existing itinerary, reference it when relevant.
             """
             response_text = await self.generate_response(chat_prompt)
-            return {"text": response_text, "type": "standard_chat"}
+
+            # Always return the existing itinerary so frontend doesn't lose state
+            return {
+                "text": response_text,
+                "type": "standard_chat",
+                "data": {"itinerary": existing_itinerary} if existing_itinerary else None
+            }

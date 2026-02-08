@@ -96,6 +96,56 @@ const getActivityIcon = (type: string) => {
     }
 }
 
+// Helper function to calculate flight duration
+const calculateFlightDuration = (departure: string, arrival: string): string => {
+    try {
+        const dep = new Date(departure)
+        const arr = new Date(arrival)
+        const diffMs = arr.getTime() - dep.getTime()
+        if (diffMs < 0) return ''
+        const hours = Math.floor(diffMs / (1000 * 60 * 60))
+        const mins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60))
+        return `${hours}h ${mins}m`
+    } catch {
+        return ''
+    }
+}
+
+// Helper function to calculate cost breakdown
+const calculateCostBreakdown = (
+    flights?: Flights,
+    accommodation?: Accommodation,
+    itinerary?: DayPlan[]
+) => {
+    // Flight costs
+    const flightTotal = (flights?.outbound?.price_estimate || 0) + (flights?.return?.price_estimate || 0)
+
+    // Hotel costs
+    const hotelTotal = (accommodation?.price_per_night || 0) * (accommodation?.total_nights || 1)
+
+    // Estimate meals and transport from price_level
+    // Price level estimates: 1=$15, 2=$35, 3=$75 for meals
+    // Transport: 1=$10, 2=$25, 3=$50
+    const mealPrices: Record<number, number> = { 1: 15, 2: 35, 3: 75 }
+    const transportPrices: Record<number, number> = { 1: 10, 2: 25, 3: 50 }
+
+    let mealTotal = 0
+    let transportTotal = 0
+
+    itinerary?.forEach((day) => {
+        day.time_slots?.forEach((slot) => {
+            const priceLevel = slot.activity?.price_level || 2
+            if (slot.activity_type === 'meal') {
+                mealTotal += mealPrices[priceLevel] || 35
+            } else if (slot.activity_type === 'transport') {
+                transportTotal += transportPrices[priceLevel] || 25
+            }
+        })
+    })
+
+    return { flightTotal, hotelTotal, mealTotal, transportTotal }
+}
+
 export function ItineraryView({ itinerary, summary, creativeAssets, tripTitle, flights, accommodation }: ItineraryProps) {
     const [activeDay, setActiveDay] = React.useState(1)
 
@@ -104,7 +154,10 @@ export function ItineraryView({ itinerary, summary, creativeAssets, tripTitle, f
     // Derive stats from itinerary if summary not provided
     const totalDays = summary?.total_days || itinerary.length
     const totalActivities = summary?.total_activities || itinerary.reduce((sum, day) => sum + (day.time_slots?.length || 0), 0)
-    const totalCost = summary?.estimated_total_cost || itinerary.reduce((sum, day) => sum + (day.estimated_cost || 0), 0)
+
+    // Use consistent cost calculation (same as Cost Breakdown card)
+    const costs = calculateCostBreakdown(flights, accommodation, itinerary)
+    const totalCost = costs.flightTotal + costs.hotelTotal + costs.mealTotal + costs.transportTotal
 
     const currentDay = itinerary.find(d => d.day_number === activeDay) || itinerary[0]
 
@@ -139,6 +192,33 @@ export function ItineraryView({ itinerary, summary, creativeAssets, tripTitle, f
                                 className="w-full rounded-lg"
                                 poster={creativeAssets.trip_poster_url}
                             />
+                        </div>
+                    )}
+                    {/* Download Buttons */}
+                    {(creativeAssets?.trip_poster_url || creativeAssets?.video_url) && (
+                        <div className="flex flex-wrap gap-2 p-4 border-t border-white/10">
+                            {creativeAssets?.trip_poster_url && (
+                                <a
+                                    href={creativeAssets.trip_poster_url}
+                                    download="trip-poster.png"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-orange-500 to-pink-500 text-white font-bold rounded-xl hover:scale-105 transition-transform text-sm"
+                                >
+                                    📥 Download Poster
+                                </a>
+                            )}
+                            {creativeAssets?.video_url && (
+                                <a
+                                    href={creativeAssets.video_url}
+                                    download="trip-video.mp4"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white font-bold rounded-xl hover:scale-105 transition-transform text-sm"
+                                >
+                                    📥 Download Video
+                                </a>
+                            )}
                         </div>
                     )}
                 </div>
@@ -183,9 +263,15 @@ export function ItineraryView({ itinerary, summary, creativeAssets, tripTitle, f
                                 <p className="text-sm text-white/70 font-mono">
                                     {flights.outbound.departure_airport} → {flights.outbound.arrival_airport}
                                 </p>
-                                <p className="text-xs text-white/50 mt-2">
-                                    {new Date(flights.outbound.departure_time).toLocaleString()}
-                                </p>
+                                <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-xs text-white/50">
+                                    <span>🛫 {new Date(flights.outbound.departure_time).toLocaleString()}</span>
+                                    <span>🛬 {new Date(flights.outbound.arrival_time).toLocaleString()}</span>
+                                </div>
+                                {calculateFlightDuration(flights.outbound.departure_time, flights.outbound.arrival_time) && (
+                                    <p className="text-orange-400 font-mono text-sm mt-2">
+                                        Duration: {calculateFlightDuration(flights.outbound.departure_time, flights.outbound.arrival_time)}
+                                    </p>
+                                )}
                                 {flights.outbound.price_estimate && (
                                     <p className="text-green-400 font-mono text-sm mt-1">${flights.outbound.price_estimate}</p>
                                 )}
@@ -198,9 +284,15 @@ export function ItineraryView({ itinerary, summary, creativeAssets, tripTitle, f
                                 <p className="text-sm text-white/70 font-mono">
                                     {flights.return.departure_airport} → {flights.return.arrival_airport}
                                 </p>
-                                <p className="text-xs text-white/50 mt-2">
-                                    {new Date(flights.return.departure_time).toLocaleString()}
-                                </p>
+                                <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-xs text-white/50">
+                                    <span>🛫 {new Date(flights.return.departure_time).toLocaleString()}</span>
+                                    <span>🛬 {new Date(flights.return.arrival_time).toLocaleString()}</span>
+                                </div>
+                                {calculateFlightDuration(flights.return.departure_time, flights.return.arrival_time) && (
+                                    <p className="text-orange-400 font-mono text-sm mt-2">
+                                        Duration: {calculateFlightDuration(flights.return.departure_time, flights.return.arrival_time)}
+                                    </p>
+                                )}
                                 {flights.return.price_estimate && (
                                     <p className="text-green-400 font-mono text-sm mt-1">${flights.return.price_estimate}</p>
                                 )}
@@ -239,6 +331,60 @@ export function ItineraryView({ itinerary, summary, creativeAssets, tripTitle, f
                     </div>
                 </div>
             )}
+
+            {/* Cost Breakdown Card */}
+            {(() => {
+                const costs = calculateCostBreakdown(flights, accommodation, itinerary)
+                const grandTotal = costs.flightTotal + costs.hotelTotal + costs.mealTotal + costs.transportTotal
+                const hasAnyCosts = grandTotal > 0
+
+                if (!hasAnyCosts) return null
+
+                return (
+                    <div className="bg-white/[0.03] backdrop-blur-xl p-6 rounded-2xl border border-white/10">
+                        <h3 className="text-xl font-mono font-bold mb-4 text-green-400 uppercase">
+                            💰 Trip Cost Estimate
+                        </h3>
+                        <div className="space-y-3">
+                            {costs.flightTotal > 0 && (
+                                <div className="flex justify-between items-center p-3 bg-white/5 rounded-xl border border-white/10">
+                                    <span className="text-white/60 font-mono">✈️ Flights (round trip)</span>
+                                    <span className="text-white font-bold font-mono">${costs.flightTotal}</span>
+                                </div>
+                            )}
+                            {costs.hotelTotal > 0 && (
+                                <div className="flex justify-between items-center p-3 bg-white/5 rounded-xl border border-white/10">
+                                    <span className="text-white/60 font-mono">🏨 Hotel ({accommodation?.total_nights || 1} nights)</span>
+                                    <span className="text-white font-bold font-mono">${costs.hotelTotal}</span>
+                                </div>
+                            )}
+                            {costs.mealTotal > 0 && (
+                                <div className="flex justify-between items-center p-3 bg-white/5 rounded-xl border border-white/10">
+                                    <span className="text-white/60 font-mono">🍽️ Meals (estimated)</span>
+                                    <span className="text-white font-bold font-mono">${costs.mealTotal}</span>
+                                </div>
+                            )}
+                            {costs.transportTotal > 0 && (
+                                <div className="flex justify-between items-center p-3 bg-white/5 rounded-xl border border-white/10">
+                                    <span className="text-white/60 font-mono">🚕 Transport (estimated)</span>
+                                    <span className="text-white font-bold font-mono">${costs.transportTotal}</span>
+                                </div>
+                            )}
+                            <div className="border-t border-white/10 pt-4 mt-4">
+                                <div className="flex justify-between items-center">
+                                    <span className="text-white font-bold text-lg">Total Estimate</span>
+                                    <span className="text-green-400 font-black text-2xl font-mono">
+                                        ${grandTotal}
+                                    </span>
+                                </div>
+                                <p className="text-xs text-white/40 mt-2 italic">
+                                    * Meal and transport costs are estimates based on activity price levels
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                )
+            })()}
 
             {/* Day Tabs */}
             <div className="flex overflow-x-auto gap-2 pb-2 scrollbar-hide">

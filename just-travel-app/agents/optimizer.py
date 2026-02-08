@@ -9,6 +9,7 @@ story-driven daily itinerary. It acts as the final composer.
 import logging
 import json
 import asyncio
+import re
 from typing import Optional
 from datetime import datetime, timedelta
 from agents.base import BaseAgent
@@ -48,8 +49,16 @@ class OptimizerAgent(BaseAgent):
                     amadeus_intel = dest.get("amadeus_intelligence")
                     break
 
-        # Default start date if missing
-        start_date_str = datetime.now().strftime("%Y-%m-%d")
+        # Extract travel dates from profile
+        departure_date = profile.get("departure_date", "")
+        return_date = profile.get("return_date", "")
+
+        # Check if dates are flexible
+        is_flexible = departure_date.startswith("FLEXIBLE:")
+        flexible_range = departure_date.replace("FLEXIBLE:", "").strip() if is_flexible else ""
+
+        # Use departure date if provided and not flexible, otherwise default to current date
+        start_date_str = datetime.now().strftime("%Y-%m-%d") if is_flexible or not departure_date else departure_date
 
         # Resolve destination city for weather lookup
         dest_city = profile.get("destination") or ""
@@ -76,11 +85,27 @@ class OptimizerAgent(BaseAgent):
             except Exception as e:
                 logger.warning(f"Weather fetch failed for '{dest_city}': {e}")
 
+        # Format travel dates info
+        travel_dates_info = ""
+        if is_flexible:
+            travel_dates_info = f"""Travel Dates: FLEXIBLE - User prefers: "{flexible_range}"
+            IMPORTANT: You must determine the OPTIMAL travel dates based on:
+            1. Weather conditions (avoid bad weather)
+            2. Flight prices (prefer cheaper periods)
+            3. Local events and festivals (highlight interesting ones)
+            4. Tourist crowds (prefer less crowded times)
+            Pick specific dates within the user's flexible range and explain why in the summary."""
+        elif departure_date and return_date:
+            travel_dates_info = f"Travel Dates: Departure {departure_date}, Return {return_date}"
+        elif departure_date:
+            travel_dates_info = f"Travel Dates: Departure {departure_date}"
+
         prompt = f"""
         You are the Master Travel Planner. Create a COMPLETE trip plan from departure to return.
 
         User Query: "{query}"
         Profile: {json.dumps(profile, default=str)}
+        {travel_dates_info}
 
         Research Data (USE THIS TO BUILD THE PLAN):
         - Flights/Transport: {json.dumps(self._extract_flights(destinations), default=str)}
@@ -208,30 +233,52 @@ class OptimizerAgent(BaseAgent):
         """
         
         response_text = await self.generate_response(prompt, context=context)
-        
+
         final_plan = {}
         try:
             final_plan = self.parse_json_response(response_text)
-            
-            # Simple validation/patching of dates
             self._patch_dates(final_plan, start_date_str)
-            
-        except Exception as e:
-            logger.error(f"Optimizer synthesis error: {e}")
+        except json.JSONDecodeError as e:
+            logger.warning(f"Initial JSON parse failed: {e}. Attempting regex extraction...")
+            # Try to extract JSON from markdown code blocks or raw text
+            json_match = re.search(r'\{[\s\S]*\}', response_text)
+            if json_match:
+                try:
+                    final_plan = json.loads(json_match.group())
+                    self._patch_dates(final_plan, start_date_str)
+                    logger.info("Successfully recovered JSON from markdown-wrapped response")
+                except json.JSONDecodeError as e2:
+                    logger.error(f"Regex extraction also failed: {e2}")
+
+        # If we still don't have a valid itinerary, create a minimal structure
+        if not final_plan.get("daily_itinerary"):
+            logger.warning("Creating fallback itinerary structure")
+            dest_name = profile.get("destination", dest_city) or "your destination"
             final_plan = {
-                "summary": "We encountered an issue generating your detailed plan, but we have your preferences saved!",
-                "daily_itinerary": []
+                "summary": f"Exciting trip to {dest_name}! Our AI is working on the details.",
+                "trip_title": f"Adventure in {dest_name}",
+                "trip_visual_theme": f"Exploring {dest_name}",
+                "daily_itinerary": [],
+                "flights": self._extract_flights(destinations)[0] if self._extract_flights(destinations) else {},
+                "accommodation": accommodations[0] if accommodations else {}
             }
 
         return final_plan
 
-    def _summarize_list(self, items: list, key: str) -> str:
+    def _summarize_list(self, items, key: str) -> str:
         """Helper to create short summaries for the prompt context."""
+        # Type validation - must be a list
         if not items:
             return "None"
+        if not isinstance(items, list):
+            logger.warning(f"_summarize_list expected list, got {type(items).__name__}")
+            return "Data available"
         try:
-            # Take top 10 to fit in context window
-            names = [str(item.get(key, "Unknown")) for item in items[:10]]
+            # Take top 10, filter to only dict items
+            valid_items = [item for item in items[:10] if isinstance(item, dict)]
+            if not valid_items:
+                return "None"
+            names = [str(item.get(key, "Unknown")) for item in valid_items]
             return ", ".join(names)
         except Exception as e:
             logger.warning(f"Failed to summarize list for key {key}: {e}")

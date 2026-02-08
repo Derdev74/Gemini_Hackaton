@@ -16,6 +16,7 @@ import { useSession, signIn, signOut } from "next-auth/react"
 import { ItineraryView } from '../components/ItineraryView'
 import TransportBox from '../components/TransportBox'
 import FoodBox from '../components/FoodBox'
+import { LoadingExperience } from '../components/LoadingExperience'
 import { useOnlineStatus } from '../hooks/useOnlineStatus'
 import { offlineStorage } from '../lib/offline-storage'
 import { syncManager } from '../lib/sync-manager'
@@ -52,6 +53,10 @@ export default function JustTravelApp() {
     originCity: '',
     destCountry: null as any,
     destCity: '',
+    flexibleDates: false,
+    departureDate: '',
+    returnDate: '',
+    dateRangeText: '',
     flightType: 'direct',
     maxStopoverTime: '2',
     travelers: 1,
@@ -84,6 +89,16 @@ export default function JustTravelApp() {
   const [savedIds, setSavedIds] = useState<Set<string>>(new Set())
   const [pendingSave, setPendingSave] = useState<any>(null)
   const [notification, setNotification] = useState('')
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle')
+
+  // Media assets state (for background video generation)
+  const [creativeAssets, setCreativeAssets] = useState<{
+    trip_poster_url?: string
+    video_url?: string
+    task_id?: string
+    status?: string
+  }>({})
+  const [mediaTaskId, setMediaTaskId] = useState<string | null>(null)
 
   // Refs
   const chatContainerRef = useRef<HTMLDivElement>(null)
@@ -143,6 +158,39 @@ export default function JustTravelApp() {
     }
   }, [isOnline])
 
+  // Poll for video status when we have a media task
+  useEffect(() => {
+    if (!mediaTaskId || creativeAssets.status === 'completed') return
+
+    const pollInterval = setInterval(async () => {
+      try {
+        const res = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/media-status/${mediaTaskId}`,
+          { credentials: 'include' }
+        )
+        if (res.ok) {
+          const data = await res.json()
+          if (data.status === 'completed') {
+            setCreativeAssets(prev => ({
+              ...prev,
+              video_url: data.video_url,
+              trip_poster_url: data.poster_url || prev.trip_poster_url,
+              status: 'completed'
+            }))
+            setNotification('🎬 Your trip video is ready!')
+            setTimeout(() => setNotification(''), 5000)
+          } else if (data.status === 'failed') {
+            setCreativeAssets(prev => ({ ...prev, status: 'failed' }))
+          }
+        }
+      } catch (err) {
+        console.error('Media status poll failed:', err)
+      }
+    }, 5000) // Poll every 5 seconds
+
+    return () => clearInterval(pollInterval)
+  }, [mediaTaskId, creativeAssets.status])
+
   const handleMealChange = (meal: string) => {
     setFormData(prev => ({
       ...prev,
@@ -188,22 +236,28 @@ export default function JustTravelApp() {
   }
 
   const savePlan = async (itinerary: any) => {
+    // Prevent duplicate clicks
+    if (saveStatus === 'saving') return
+
     if (!currentUser) {
       setPendingSave(itinerary)
       setAuthModalOpen(true)
       return
     }
 
+    setSaveStatus('saving')
+
     try {
+      const saveId = `itin-${Date.now()}`
       await offlineStorage.saveItinerary({
-        id: `itin-${Date.now()}`,
+        id: saveId,
         destination: itinerary?.destination || formData.destCity || 'Unknown',
         summary: itinerary?.summary || '',
         itinerary_data: itinerary || {},
         creative_assets: {}
       })
 
-      setSavedIds(prev => new Set(prev).add(`itin-${Date.now()}`))
+      setSavedIds(prev => new Set(prev).add(saveId))
 
       if (isOnline) {
         const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/itinerary/save`, {
@@ -219,12 +273,18 @@ export default function JustTravelApp() {
         })
 
         if (res.ok) {
-          setNotification('✅ Your itinerary has been saved!')
-          setTimeout(() => setNotification(''), 5000)
+          setSaveStatus('saved')
+          setNotification('✅ Your trip has been saved!')
+          setTimeout(() => {
+            setNotification('')
+            setSaveStatus('idle')
+          }, 3000)
+        } else {
+          setSaveStatus('idle')
         }
       } else {
         syncManager.addPendingSave({
-          id: `itin-${Date.now()}`,
+          id: saveId,
           data: {
             destination: itinerary?.destination || formData.destCity || 'Unknown',
             summary: itinerary?.summary || '',
@@ -232,11 +292,16 @@ export default function JustTravelApp() {
             creative_assets: {}
           }
         })
+        setSaveStatus('saved')
         setNotification('💾 Saved offline. Will sync when you\'re back online.')
-        setTimeout(() => setNotification(''), 5000)
+        setTimeout(() => {
+          setNotification('')
+          setSaveStatus('idle')
+        }, 3000)
       }
     } catch (e) {
       console.error('Save failed:', e)
+      setSaveStatus('idle')
     }
   }
 
@@ -246,7 +311,13 @@ export default function JustTravelApp() {
     setShowResults(false)
 
     try {
+      // Build date info based on flexible or fixed dates
+      const dateInfo = formData.flexibleDates
+        ? `Flexible dates: ${formData.dateRangeText || 'anytime'}. Please find optimal dates based on weather, prices, and events.`
+        : `Dates: ${formData.departureDate} to ${formData.returnDate}.`
+
       const message = `I want to travel from ${formData.originCity}, ${formData.originCountry?.label || ''} to ${formData.destCity}, ${formData.destCountry?.label || ''}.
+${dateInfo}
 ${formData.travelers} traveler(s), budget: $${formData.budget} ${formData.budgetType}.
 Flight preference: ${formData.flightType}${formData.flightType === 'stops' ? ` (max ${formData.maxStopoverTime}h layover)` : ''}.
 ${formData.eatOutside === 'yes' ? `Dining: ${formData.dietary || 'Standard'}, meals: ${formData.meals.join(', ')}` : 'No dining recommendations needed.'}`
@@ -261,7 +332,12 @@ ${formData.eatOutside === 'yes' ? `Dining: ${formData.dietary || 'Standard'}, me
             dietary: formData.dietary ? [formData.dietary] : [],
             budget_per_day_usd: parseInt(formData.budget) || 200,
             trip_type: 'exploration',
-            destination: formData.destCity
+            destination: formData.destCity,
+            origin: formData.originCity,
+            travelers: formData.travelers,
+            travel_dates: formData.flexibleDates
+              ? { flexible: true, range_text: formData.dateRangeText }
+              : { departure: formData.departureDate, return: formData.returnDate }
           }
         })
       })
@@ -271,6 +347,21 @@ ${formData.eatOutside === 'yes' ? `Dining: ${formData.dietary || 'Standard'}, me
         if (response.data?.itinerary) {
           setLatestItinerary(response.data.itinerary)
         }
+
+        // Extract creative assets from response
+        if (response.creative) {
+          setCreativeAssets({
+            trip_poster_url: response.creative.poster_url,
+            video_url: response.creative.video_url,
+            task_id: response.creative.task_id,
+            status: response.creative.status || 'generating'
+          })
+          // Start polling if video is still generating
+          if (response.creative.task_id && response.creative.status !== 'completed') {
+            setMediaTaskId(response.creative.task_id)
+          }
+        }
+
         setShowResults(true)
       }
     } catch (error) {
@@ -295,7 +386,16 @@ ${formData.eatOutside === 'yes' ? `Dining: ${formData.dietary || 'Standard'}, me
         body: JSON.stringify({
           message: chatInput,
           preferences: {
-            existing_itinerary: latestItinerary
+            existing_itinerary: latestItinerary,
+            // Pass user preferences so chatbot is context-aware
+            destination: formData.destCity,
+            origin: formData.originCity,
+            travelers: formData.travelers,
+            budget_per_day_usd: parseInt(formData.budget) || 200,
+            dietary: formData.dietary ? [formData.dietary] : [],
+            travel_dates: formData.flexibleDates
+              ? { flexible: true, range_text: formData.dateRangeText }
+              : { departure: formData.departureDate, return: formData.returnDate }
           }
         })
       })
@@ -321,6 +421,9 @@ ${formData.eatOutside === 'yes' ? `Dining: ${formData.dietary || 'Standard'}, me
 
   return (
     <main id="plan" className="min-h-screen flex flex-col items-center py-12 px-4 relative">
+      {/* Full-screen Loading Experience */}
+      <LoadingExperience isLoading={loading} />
+
       {/* Notification Banner */}
       {notification && (
         <div className="fixed top-20 left-1/2 transform -translate-x-1/2 z-50 bg-gradient-to-r from-orange-500 to-pink-500 text-white px-6 py-3 rounded-full font-bold shadow-lg shadow-orange-500/30 animate-slide-up">
@@ -424,6 +527,65 @@ ${formData.eatOutside === 'yes' ? `Dining: ${formData.dietary || 'Standard'}, me
                 onChange={(e) => setFormData({ ...formData, destCity: e.target.value })}
               />
             </div>
+          </div>
+
+          {/* Travel Dates */}
+          <div className="bg-white/5 p-6 rounded-3xl border border-white/10 space-y-4">
+            <div className="flex items-center justify-between">
+              <label className="text-orange-400 font-black text-sm uppercase tracking-widest">Travel Dates</label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={formData.flexibleDates}
+                  onChange={(e) => setFormData({ ...formData, flexibleDates: e.target.checked })}
+                  className="w-5 h-5 accent-orange-500 rounded"
+                />
+                <span className="text-sm text-white/70 font-bold">I'm flexible</span>
+              </label>
+            </div>
+
+            {formData.flexibleDates ? (
+              <div className="space-y-3">
+                <input
+                  type="text"
+                  placeholder="e.g., mid February to late April, or any weekend in March..."
+                  value={formData.dateRangeText}
+                  className="w-full bg-white/5 border border-white/10 p-4 rounded-2xl text-white font-bold outline-none focus:border-orange-500 transition-all placeholder:text-white/30 placeholder:font-normal"
+                  onChange={(e) => setFormData({ ...formData, dateRangeText: e.target.value })}
+                />
+                <div className="flex items-start gap-2 p-3 bg-gradient-to-r from-orange-500/10 to-pink-500/10 rounded-xl border border-orange-500/20">
+                  <span className="text-lg">💬</span>
+                  <p className="text-sm text-white/70">
+                    <span className="text-orange-400 font-bold">Pro tip:</span> Our AI will find the optimal dates based on weather, prices, and events. Use the chat assistant below to refine your preferences!
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <label className="text-white/60 font-bold text-xs uppercase">Departure</label>
+                  <input
+                    required={!formData.flexibleDates}
+                    type="date"
+                    value={formData.departureDate}
+                    min={new Date().toISOString().split('T')[0]}
+                    className="w-full bg-white/5 border border-white/10 p-4 rounded-2xl text-white font-bold outline-none focus:border-orange-500 transition-all [color-scheme:dark]"
+                    onChange={(e) => setFormData({ ...formData, departureDate: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-white/60 font-bold text-xs uppercase">Return</label>
+                  <input
+                    required={!formData.flexibleDates}
+                    type="date"
+                    value={formData.returnDate}
+                    min={formData.departureDate || new Date().toISOString().split('T')[0]}
+                    className="w-full bg-white/5 border border-white/10 p-4 rounded-2xl text-white font-bold outline-none focus:border-pink-500 transition-all [color-scheme:dark]"
+                    onChange={(e) => setFormData({ ...formData, returnDate: e.target.value })}
+                  />
+                </div>
+              </div>
+            )}
           </div>
 
           {/* 3. Flight Preference */}
@@ -576,12 +738,29 @@ ${formData.eatOutside === 'yes' ? `Dining: ${formData.dietary || 'Standard'}, me
                   <ItineraryView
                     itinerary={latestItinerary.daily_itinerary || latestItinerary.itinerary || latestItinerary}
                     summary={latestItinerary}
+                    tripTitle={latestItinerary.trip_title}
+                    flights={latestItinerary.flights}
+                    accommodation={latestItinerary.accommodation}
+                    creativeAssets={{
+                      trip_poster_url: creativeAssets.trip_poster_url || latestItinerary.creative?.trip_poster_url,
+                      video_url: creativeAssets.video_url || latestItinerary.creative?.video_url,
+                      daily_posters: latestItinerary.creative?.daily_posters
+                    }}
                   />
                   <button
                     onClick={() => savePlan(latestItinerary)}
-                    className="w-full py-4 bg-gradient-to-r from-green-500 to-emerald-500 text-white font-black text-lg rounded-2xl shadow-lg shadow-green-500/30 hover:scale-[1.02] active:scale-95 transition-all"
+                    disabled={saveStatus === 'saving' || saveStatus === 'saved'}
+                    className={`w-full py-4 text-white font-black text-lg rounded-2xl shadow-lg hover:scale-[1.02] active:scale-95 transition-all ${
+                      saveStatus === 'saved'
+                        ? 'bg-gradient-to-r from-green-600 to-emerald-600 shadow-green-500/30'
+                        : saveStatus === 'saving'
+                        ? 'bg-gradient-to-r from-orange-500 to-pink-500 shadow-orange-500/30 opacity-75'
+                        : 'bg-gradient-to-r from-green-500 to-emerald-500 shadow-green-500/30'
+                    }`}
                   >
-                    💾 SAVE THIS ITINERARY
+                    {saveStatus === 'saving' ? '⏳ SAVING...' :
+                     saveStatus === 'saved' ? '✅ TRIP SAVED!' :
+                     '💾 SAVE THIS ITINERARY'}
                   </button>
                 </>
               )}

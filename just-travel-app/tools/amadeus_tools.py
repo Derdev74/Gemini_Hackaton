@@ -15,6 +15,10 @@ Features:
 
 import os
 import logging
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 import asyncio
 from typing import Optional, Dict, List, Any
 from datetime import datetime, timedelta

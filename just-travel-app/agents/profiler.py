@@ -30,6 +30,8 @@ class TravelerProfile:
     interests: list = field(default_factory=list)
     language_preferences: list = field(default_factory=lambda: ["English"])
     destination: str = ""
+    departure_date: str = ""
+    return_date: str = ""
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -59,6 +61,18 @@ class ProfilerAgent(BaseAgent):
             if hasattr(current_profile, key):
                 setattr(current_profile, key, value)
 
+        # Extract travel dates from preferences if provided
+        preferences = context.get("preferences", {})
+        travel_dates = preferences.get("travel_dates", {})
+        if travel_dates:
+            if travel_dates.get("flexible"):
+                # Flexible dates - store the range text for AI to interpret
+                current_profile.departure_date = f"FLEXIBLE: {travel_dates.get('range_text', 'anytime')}"
+                current_profile.return_date = ""
+            else:
+                current_profile.departure_date = travel_dates.get("departure", "")
+                current_profile.return_date = travel_dates.get("return", "")
+
         # Short-circuit: greetings need no LLM call
         if query.strip().lower().rstrip("!?.") in self.GREETINGS:
             return {
@@ -80,6 +94,8 @@ class ProfilerAgent(BaseAgent):
         Task:
         1. Identify any NEW or UPDATED:
            - destination (the city/country the user wants to visit)
+           - departure_date (YYYY-MM-DD format if mentioned)
+           - return_date (YYYY-MM-DD format if mentioned)
            - dietary_restrictions (e.g., vegetarian, vegan)
            - religious_requirements (e.g., halal, kosher)
            - allergies

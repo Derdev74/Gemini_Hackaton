@@ -30,13 +30,19 @@ class BookingTools:
         checkout_date: str,
         adults: int = 2,
         rooms: int = 1,
-        currency: str = "USD"
+        currency: str = "USD",
+        budget_max: Optional[int] = None,
+        **kwargs  # Accept and ignore extra params from LLM (e.g., amenities)
     ) -> List[Dict]:
         """
         Search for hotels in a location.
         orchestrates the 2-step process: Resolve Location -> Fetch Hotels.
         Falls back to mock data on ANY failure.
         """
+        # Log ignored extra kwargs for debugging
+        if kwargs:
+            logger.debug(f"Ignoring extra search_hotels params: {list(kwargs.keys())}")
+
         if not self._connected:
             return self._get_mock_hotels(location)
 
@@ -49,7 +55,7 @@ class BookingTools:
                 return self._get_mock_hotels(location)
                 
             logger.info(f"Fetching hotels for dest_id={dest_id} type={search_type}...")
-            hotels = self._fetch_properties(dest_id, search_type, checkin_date, checkout_date, adults, rooms, currency, location)
+            hotels = self._fetch_properties(dest_id, search_type, checkin_date, checkout_date, adults, rooms, currency, location, budget_max)
             
             if not hotels:
                 logger.warning("No hotels found via API. Using mocks.")
@@ -84,10 +90,10 @@ class BookingTools:
             logger.error(f"Location resolution error: {e}")
             raise
 
-    def _fetch_properties(self, dest_id, search_type, checkin, checkout, adults, rooms, currency, location):
+    def _fetch_properties(self, dest_id, search_type, checkin, checkout, adults, rooms, currency, location, budget_max=None):
         """Step 2: Get properties list"""
         url = f"https://{self.host}/api/v1/hotels/searchHotels"
-        
+
         querystring = {
             "dest_id": dest_id,
             "search_type": search_type,
@@ -96,8 +102,12 @@ class BookingTools:
             "adults": str(adults),
             "room_qty": str(rooms),
             "currency_code": currency,
-            "sort_order": "popularity" # Good default
+            "sort_order": "popularity"  # Good default
         }
+
+        # Add budget filter if provided
+        if budget_max is not None:
+            querystring["price_max"] = str(budget_max)
         
         headers = {
             "x-rapidapi-key": self.api_key,

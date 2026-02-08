@@ -2,6 +2,8 @@ import os
 import logging
 import asyncio
 import time
+import base64
+from io import BytesIO
 from typing import Optional
 from google import genai
 from google.genai import types
@@ -109,13 +111,31 @@ class CreativeTools:
                     logger.warning(f"Image path not found: {abs_image_path}. Falling back to text-to-video.")
 
             # 2. Call API (Long Running Operation)
+            operation = None
             if pil_image:
-                operation = await asyncio.to_thread(
-                    self.client.models.generate_videos,
-                    model=self.video_model,
-                    prompt=prompt,
-                    image=pil_image
-                )
+                try:
+                    # Convert PIL image to bytes, then create types.Image
+                    img_buffer = BytesIO()
+                    pil_image.save(img_buffer, format='PNG')
+                    img_bytes = img_buffer.getvalue()
+
+                    # Create proper SDK Image object with image_bytes
+                    image_obj = types.Image(image_bytes=img_bytes, mime_type='image/png')
+
+                    operation = await asyncio.to_thread(
+                        self.client.models.generate_videos,
+                        model=self.video_model,
+                        prompt=prompt,
+                        image=image_obj
+                    )
+                except Exception as img_error:
+                    # If image-to-video fails, fall back to text-to-video
+                    logger.warning(f"Image-to-video failed: {img_error}. Using text-to-video instead.")
+                    operation = await asyncio.to_thread(
+                        self.client.models.generate_videos,
+                        model=self.video_model,
+                        prompt=prompt
+                    )
             else:
                 operation = await asyncio.to_thread(
                     self.client.models.generate_videos,

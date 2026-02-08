@@ -1,6 +1,6 @@
 /**
  * My Itineraries Page - View all saved itineraries
- * Neo-brutalist design with offline support
+ * Glassmorphism design with offline support
  */
 
 'use client'
@@ -117,9 +117,9 @@ export default function MyItinerariesPage() {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center bg-brutal-white p-12 rounded-3xl border-4 border-brutal-black shadow-brutal">
+        <div className="text-center bg-white/[0.03] backdrop-blur-3xl p-12 rounded-3xl border border-white/10 shadow-2xl shadow-orange-500/10">
           <div className="text-6xl mb-4 animate-bounce">✈️</div>
-          <p className="text-gray-600 text-lg font-mono font-bold">Loading your trips...</p>
+          <p className="text-white/70 text-lg font-bold">Loading your trips...</p>
         </div>
       </div>
     )
@@ -128,13 +128,13 @@ export default function MyItinerariesPage() {
   if (error) {
     return (
       <div className="min-h-screen flex items-center justify-center p-4">
-        <div className="bg-brutal-white p-8 rounded-3xl border-4 border-red-500 shadow-brutal text-center max-w-md">
+        <div className="bg-white/[0.03] backdrop-blur-3xl p-8 rounded-3xl border border-red-500/30 shadow-2xl shadow-red-500/10 text-center max-w-md">
           <div className="text-6xl mb-4">⚠️</div>
-          <h2 className="text-2xl font-black text-red-500 mb-4">Error</h2>
-          <p className="text-gray-600 mb-6">{error}</p>
+          <h2 className="text-2xl font-black text-red-400 mb-4">Error</h2>
+          <p className="text-white/60 mb-6">{error}</p>
           <button
             onClick={loadItineraries}
-            className="bg-brutal-orange text-white px-6 py-3 font-mono font-bold border-2 border-brutal-black shadow-brutal hover:shadow-brutal-hover hover:translate-x-[2px] hover:translate-y-[2px] transition-all"
+            className="bg-gradient-to-r from-orange-500 to-pink-500 text-white px-6 py-3 font-bold rounded-xl shadow-lg shadow-orange-500/30 hover:scale-105 transition-transform"
           >
             Try Again
           </button>
@@ -149,36 +149,36 @@ export default function MyItinerariesPage() {
         {/* Header */}
         <div className="mb-8 text-center">
           <h1 className="text-5xl font-black text-white mb-4 uppercase tracking-wider">
-            My <span className="text-brutal-orange">Trips</span>
+            My <span className="text-orange-400">Trips</span>
           </h1>
-          <div className="h-1 w-24 bg-brutal-orange mx-auto mb-4 shadow-glow-orange" />
+          <div className="h-1 w-24 bg-gradient-to-r from-orange-500 to-pink-500 mx-auto mb-4 rounded-full" />
 
           {/* Online/Offline Status */}
           {!isOnline && (
-            <div className="bg-brutal-yellow p-4 rounded-2xl border-4 border-brutal-black shadow-brutal mb-6 inline-block">
-              <div className="flex items-center gap-2 text-brutal-black font-mono font-bold">
+            <div className="bg-white/[0.03] backdrop-blur-xl p-4 rounded-2xl border border-yellow-500/30 shadow-lg shadow-yellow-500/10 mb-6 inline-block">
+              <div className="flex items-center gap-2 text-yellow-400 font-bold">
                 <span className="text-2xl">📱</span>
                 <span>Viewing offline. You can access all saved itineraries!</span>
               </div>
             </div>
           )}
 
-          <p className="text-white/70 font-mono">
+          <p className="text-white/50">
             {itineraries.length} {itineraries.length === 1 ? 'trip' : 'trips'} saved
           </p>
         </div>
 
         {/* No Itineraries */}
         {itineraries.length === 0 && (
-          <div className="bg-brutal-white p-12 rounded-3xl border-4 border-brutal-black shadow-brutal-lg text-center max-w-xl mx-auto">
+          <div className="bg-white/[0.03] backdrop-blur-3xl p-12 rounded-3xl border border-white/10 shadow-2xl shadow-orange-500/10 text-center max-w-xl mx-auto">
             <div className="text-6xl mb-4">🗺️</div>
-            <h2 className="text-2xl font-black text-brutal-orange mb-4">No Saved Trips Yet</h2>
-            <p className="text-gray-600 mb-6">
+            <h2 className="text-2xl font-black text-orange-400 mb-4">No Saved Trips Yet</h2>
+            <p className="text-white/60 mb-6">
               Start planning your next adventure to save itineraries here!
             </p>
             <a
               href="/"
-              className="bg-brutal-orange text-white px-6 py-3 font-mono font-bold border-2 border-brutal-black shadow-brutal hover:shadow-brutal-hover hover:translate-x-[2px] hover:translate-y-[2px] transition-all inline-block"
+              className="bg-gradient-to-r from-orange-500 to-pink-500 text-white px-6 py-3 font-bold rounded-xl shadow-lg shadow-orange-500/30 hover:scale-105 transition-transform inline-block"
             >
               Plan a Trip
             </a>
@@ -190,27 +190,27 @@ export default function MyItinerariesPage() {
           {itineraries.map((itinerary) => (
             <div
               key={itinerary.id}
-              className="bg-brutal-white rounded-3xl border-4 border-brutal-black shadow-brutal overflow-hidden hover:shadow-brutal-lg transition-all"
+              className="bg-white/[0.03] backdrop-blur-3xl rounded-3xl border border-white/10 shadow-2xl shadow-orange-500/5 overflow-hidden hover:border-orange-500/30 transition-all"
             >
               {/* Header */}
               <div className="p-6">
                 <div className="flex items-start justify-between mb-4">
                   <div className="flex-1">
-                    <h3 className="text-2xl font-black text-brutal-orange mb-2">
+                    <h3 className="text-2xl font-black text-orange-400 mb-2">
                       {itinerary.destination}
                     </h3>
-                    <p className="text-gray-600">{itinerary.summary}</p>
+                    <p className="text-white/60">{itinerary.summary}</p>
                   </div>
                   <button
                     onClick={() => handleDelete(itinerary.id)}
-                    className="text-red-500 hover:text-red-600 transition-colors p-2 text-2xl"
+                    className="text-red-400 hover:text-red-300 transition-colors p-2 text-2xl hover:scale-110"
                     title="Delete itinerary"
                   >
                     🗑️
                   </button>
                 </div>
 
-                <div className="flex items-center gap-4 text-sm text-gray-500 font-mono mb-4">
+                <div className="flex items-center gap-4 text-sm text-white/40 mb-4">
                   <span>Saved {new Date(itinerary.saved_at).toLocaleDateString()}</span>
                   <span>•</span>
                   <span>Last viewed {new Date(itinerary.last_accessed).toLocaleDateString()}</span>
@@ -218,7 +218,7 @@ export default function MyItinerariesPage() {
 
                 <button
                   onClick={() => toggleExpand(itinerary.id)}
-                  className="bg-brutal-yellow text-brutal-black px-4 py-2 font-mono font-bold text-sm border-2 border-brutal-black shadow-brutal hover:shadow-brutal-hover hover:translate-x-[2px] hover:translate-y-[2px] transition-all"
+                  className="bg-white/10 text-white/80 px-5 py-2.5 text-sm font-bold rounded-xl border border-white/10 hover:bg-white/20 transition-all"
                 >
                   {expandedId === itinerary.id ? '▲ Hide Details' : '▼ View Details'}
                 </button>
@@ -226,7 +226,7 @@ export default function MyItinerariesPage() {
 
               {/* Expanded Content */}
               {expandedId === itinerary.id && (
-                <div className="border-t-4 border-brutal-black p-6 bg-gray-50">
+                <div className="border-t border-white/10 p-6 bg-white/[0.02]">
                   <ItineraryView itinerary={itinerary.itinerary_data} />
                 </div>
               )}

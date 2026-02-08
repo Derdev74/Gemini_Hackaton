@@ -645,10 +645,12 @@ async def chat_endpoint(
                     profile=chat_req.preferences.get("profile")
                 )
             else:  # standard_chat
+                # Include data from chatbot response (preserves existing itinerary)
                 return AgentResponse(
                     agent="chatbot",
                     status="success",
                     message=chatbot_response.get("text", ""),
+                    data=chatbot_response.get("data"),  # Pass through itinerary
                     profile=chat_req.preferences.get("profile")
                 )
         else:

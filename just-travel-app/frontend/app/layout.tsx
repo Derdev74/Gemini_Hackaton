@@ -7,9 +7,11 @@
  */
 
 import type { Metadata, Viewport } from 'next'
+import Script from 'next/script'
 import MeshBackground from '../components/MeshBackground'
 import OfflineBanner from '../components/OfflineBanner'
 import InstallPrompt from '../components/InstallPrompt'
+import HeaderInstallButton from '../components/HeaderInstallButton'
 import { Providers } from './providers'
 import './globals.css'
 
@@ -64,6 +66,18 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className="scroll-smooth">
+      <head>
+        {/* Capture PWA install event before React hydrates */}
+        <Script id="pwa-install-capture" strategy="beforeInteractive">
+          {`
+            window.__PWA_DEFERRED_PROMPT = null;
+            window.addEventListener('beforeinstallprompt', function(e) {
+              e.preventDefault();
+              window.__PWA_DEFERRED_PROMPT = e;
+            });
+          `}
+        </Script>
+      </head>
       <body className="min-h-screen flex flex-col bg-background">
         <MeshBackground />
         <Providers>
@@ -83,7 +97,8 @@ export default function RootLayout({
                 </a>
 
                 {/* Navigation links */}
-                <div className="hidden md:flex items-center gap-6">
+                <div className="hidden md:flex items-center gap-4">
+                  <HeaderInstallButton />
                   <a
                     href="/my-itineraries"
                     className="font-black font-bold uppercase text-sm text-white/70 no-underline hover:text-orange-400 transition-colors"
