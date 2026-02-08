@@ -63,7 +63,18 @@ class OptimizerAgent(BaseAgent):
         # Resolve destination city for weather lookup
         dest_city = profile.get("destination") or ""
         if not dest_city and destinations:
-            dest_city = destinations[0].get("name", "")
+            # Handle both list format and new dict format from Pathfinder
+            if isinstance(destinations, list) and len(destinations) > 0:
+                first_dest = destinations[0]
+                if isinstance(first_dest, dict):
+                    dest_city = first_dest.get("name", "")
+            elif isinstance(destinations, dict):
+                # New format: {"flights": [...], "amadeus_intelligence": {...}}
+                flights = destinations.get("flights", [])
+                if flights and isinstance(flights, list) and len(flights) > 0:
+                    first_flight = flights[0]
+                    if isinstance(first_flight, dict):
+                        dest_city = first_flight.get("destination", "") or first_flight.get("arrival_airport", "")
 
         # Fetch weather forecast (non-blocking)
         weather_data = {}

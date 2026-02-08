@@ -149,17 +149,23 @@ const calculateCostBreakdown = (
 export function ItineraryView({ itinerary, summary, creativeAssets, tripTitle, flights, accommodation }: ItineraryProps) {
     const [activeDay, setActiveDay] = React.useState(1)
 
-    if (!itinerary || itinerary.length === 0) return null
+    // Defensive check: ensure itinerary is an array
+    // Handle cases where full itinerary object is passed instead of daily_itinerary array
+    const dailyItinerary = Array.isArray(itinerary)
+        ? itinerary
+        : (itinerary as unknown as { daily_itinerary?: DayPlan[] })?.daily_itinerary || []
+
+    if (!dailyItinerary || dailyItinerary.length === 0) return null
 
     // Derive stats from itinerary if summary not provided
-    const totalDays = summary?.total_days || itinerary.length
-    const totalActivities = summary?.total_activities || itinerary.reduce((sum, day) => sum + (day.time_slots?.length || 0), 0)
+    const totalDays = summary?.total_days || dailyItinerary.length
+    const totalActivities = summary?.total_activities || dailyItinerary.reduce((sum, day) => sum + (day.time_slots?.length || 0), 0)
 
     // Use consistent cost calculation (same as Cost Breakdown card)
-    const costs = calculateCostBreakdown(flights, accommodation, itinerary)
+    const costs = calculateCostBreakdown(flights, accommodation, dailyItinerary)
     const totalCost = costs.flightTotal + costs.hotelTotal + costs.mealTotal + costs.transportTotal
 
-    const currentDay = itinerary.find(d => d.day_number === activeDay) || itinerary[0]
+    const currentDay = dailyItinerary.find(d => d.day_number === activeDay) || dailyItinerary[0]
 
     // Get daily poster for current day
     const currentDayPoster = creativeAssets?.daily_posters?.find(p => p.day === activeDay)?.poster_url
@@ -334,7 +340,7 @@ export function ItineraryView({ itinerary, summary, creativeAssets, tripTitle, f
 
             {/* Cost Breakdown Card */}
             {(() => {
-                const costs = calculateCostBreakdown(flights, accommodation, itinerary)
+                const costs = calculateCostBreakdown(flights, accommodation, dailyItinerary)
                 const grandTotal = costs.flightTotal + costs.hotelTotal + costs.mealTotal + costs.transportTotal
                 const hasAnyCosts = grandTotal > 0
 
@@ -388,7 +394,7 @@ export function ItineraryView({ itinerary, summary, creativeAssets, tripTitle, f
 
             {/* Day Tabs */}
             <div className="flex overflow-x-auto gap-2 pb-2 scrollbar-hide">
-                {itinerary.map((day) => {
+                {dailyItinerary.map((day) => {
                     const hasPoster = creativeAssets?.daily_posters?.some(p => p.day === day.day_number && p.poster_url)
                     return (
                         <button

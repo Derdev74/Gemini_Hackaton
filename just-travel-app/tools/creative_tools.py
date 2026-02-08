@@ -165,10 +165,37 @@ class CreativeTools:
                 filename = f"gen_video_{timestamp}.mp4"
                 filepath = os.path.join(self.generated_dir, filename)
 
-                await asyncio.to_thread(video_obj.video.save, filepath)
+                # Handle both remote URI and local bytes
+                video_saved = False
+                if hasattr(video_obj.video, 'uri') and video_obj.video.uri:
+                    # Download from remote URI
+                    import httpx
+                    logger.info(f"Downloading video from remote URI: {video_obj.video.uri[:50]}...")
+                    async with httpx.AsyncClient(timeout=120.0) as client:
+                        response = await client.get(video_obj.video.uri)
+                        response.raise_for_status()
+                        with open(filepath, 'wb') as f:
+                            f.write(response.content)
+                        video_saved = True
+                elif hasattr(video_obj.video, 'video_bytes') and video_obj.video.video_bytes:
+                    # Save local bytes directly
+                    with open(filepath, 'wb') as f:
+                        f.write(video_obj.video.video_bytes)
+                    video_saved = True
+                else:
+                    # Fallback: try the SDK save method
+                    try:
+                        await asyncio.to_thread(video_obj.video.save, filepath)
+                        video_saved = True
+                    except Exception as save_err:
+                        logger.error(f"SDK save failed: {save_err}")
 
-                logger.info(f"Video saved to {filepath}")
-                return f"/generated/{filename}"
+                if video_saved:
+                    logger.info(f"Video saved to {filepath}")
+                    return f"/generated/{filename}"
+                else:
+                    logger.error("Could not save video - no valid source found")
+                    return ""
             else:
                 logger.error("Video generation completed but returned no videos.")
                 return ""
