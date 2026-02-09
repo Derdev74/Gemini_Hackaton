@@ -4,6 +4,11 @@
 .vscode/
 .idea/
 .claude/
+*.log
+*.pdf
+venv/ 
+.history/
+artifacts/
 .venv/
 
 # Python
