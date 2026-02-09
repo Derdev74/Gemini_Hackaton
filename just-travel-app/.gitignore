@@ -10,6 +10,7 @@ venv/
 .history/
 artifacts/
 .venv/
+myenv/
 
 # Python
 __pycache__/
