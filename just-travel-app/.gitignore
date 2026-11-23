@@ -69,3 +69,6 @@ storage/
 *.njsproj
 *.sln
 *.sw?
+
+# Local database
+*.db
